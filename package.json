@@ -1,0 +1,32 @@
+{
+  "name": "dwn-sql-store",
+  "type": "module",
+  "version": "0.0.1",
+  "dependencies": {
+    "@tbd54566975/dids": "0.1.7",
+    "@tbd54566975/dwn-sdk-js": "0.0.35",
+    "kysely": "0.25.0",
+    "mysql2": "3.3.5"
+  },
+  "devDependencies": {
+    "@types/chai": "4.3.4",
+    "@types/express": "4.17.17",
+    "@types/mocha": "10.0.1",
+    "@types/node": "20.3.1",
+    "@types/readable-stream": "2.3.15",
+    "@types/supertest": "2.0.12",
+    "@typescript-eslint/eslint-plugin": "5.59.11",
+    "@typescript-eslint/parser": "5.59.11",
+    "chai": "4.3.6",
+    "chai-as-promised": "7.1.1",
+    "eslint": "8.42.0",
+    "mocha": "10.2.0",
+    "rimraf": "5.0.1",
+    "typescript": "5.0.4"
+  },
+  "scripts": {
+    "clean": "rimraf dist",
+    "compile": "tsc",
+    "test": "npm run compile && mocha dist/tests/*.spec.js"
+  }
+}
