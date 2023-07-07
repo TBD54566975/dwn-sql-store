@@ -6,7 +6,8 @@
     "@tbd54566975/dids": "0.1.7",
     "@tbd54566975/dwn-sdk-js": "0.0.35",
     "kysely": "0.25.0",
-    "mysql2": "3.3.5"
+    "mysql2": "3.3.5",
+    "readable-stream": "^4.4.2"
   },
   "devDependencies": {
     "@types/chai": "4.3.4",
