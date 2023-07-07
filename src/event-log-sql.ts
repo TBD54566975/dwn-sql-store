@@ -103,4 +103,8 @@ export class EventLogSql implements EventLog {
     // TODO: numDeletedRows is a bigint. need to decide what to return here
     return result.numDeletedRows as any;
   }
+
+  async clear(): Promise<void> {
+    throw new Error('Method not implemented.');
+  }
 }
