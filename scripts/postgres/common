@@ -2,10 +2,7 @@
 
 # This script contains variables used in all of the other scripts in this directory
 
-# neckbeard bash used to get the value of _this_ directory.
-THIS_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
-CONTAINER_NAME=dwn-mysql
+CONTAINER_NAME=dwn-postgres
 RUNNING_CONTAINER=$(docker ps -aq --filter name=$CONTAINER_NAME --filter status=running)
 STOPPED_CONTAINER=$(docker ps -aq --filter name=$CONTAINER_NAME --filter status=exited)
 
@@ -13,9 +10,5 @@ STOPPED_CONTAINER=$(docker ps -aq --filter name=$CONTAINER_NAME --filter status=
 : ${DB_USER:="root"}
 : ${DB_PASSWORD:="dwn"}
 : ${DB_HOST:="localhost"}
-: ${DB_PORT:="3306"}
+: ${DB_PORT:="5432"}
 : ${DB_NAME:="dwn"}
-
-# colors that can be used in bash scripts when echoing
-YELLOW='\033[33m'
-RESET='\033[0m'
