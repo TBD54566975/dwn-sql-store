@@ -1,5 +1,11 @@
 dist
 node_modules
+
+# Default LevelDB
 DATASTORE
 INDEX
 MESSAGESTORE
+EVENTLOG
+
+# sqlite
+dwn.sqlite
