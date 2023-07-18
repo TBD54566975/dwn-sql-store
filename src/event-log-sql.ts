@@ -1,5 +1,5 @@
 import type { Generated } from 'kysely';
-import type { EventLog, Event } from '@tbd54566975/dwn-sdk-js';
+import type { EventLog, Event, GetEventsOptions } from '@tbd54566975/dwn-sdk-js';
 
 import * as mysql2 from 'mysql2';
 
@@ -13,10 +13,6 @@ interface EventLogTable {
 
 interface Database {
   eventlog: EventLogTable;
-}
-
-type GetEventsOpts = {
-  gt: string;
 }
 
 export class EventLogSql implements EventLog {
@@ -55,22 +51,26 @@ export class EventLogSql implements EventLog {
       .execute();
   }
 
-  close(): Promise<void> {
+  async close(): Promise<void> {
     this.#mysqlConnectionPool.end();
-
-    return;
   }
 
-  async append(tenant: string, messageCid: string): Promise<string> {
+  async append(
+    tenant: string,
+    messageCid: string
+  ): Promise<string> {
     const result = await this.#db
       .insertInto('eventlog')
       .values({ tenant, messageCid })
       .executeTakeFirstOrThrow();
 
-    return result.insertId.toString();
+    return result.insertId?.toString() ?? '';
   }
 
-  async getEvents(tenant: string, options?: GetEventsOpts): Promise<Array<Event>> {
+  async getEvents(
+    tenant: string,
+    options?: GetEventsOptions
+  ): Promise<Array<Event>> {
     const query = this.#db
       .selectFrom('eventlog')
       .selectAll()
@@ -93,7 +93,10 @@ export class EventLogSql implements EventLog {
     return events;
   }
 
-  async deleteEventsByCid(tenant: string, cids: string[]): Promise<number> {
+  async deleteEventsByCid(
+    tenant: string,
+    cids: string[]
+  ): Promise<number> {
     const result = await this.#db
       .deleteFrom('eventlog')
       .where('tenant', '=', tenant)
