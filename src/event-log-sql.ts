@@ -1,66 +1,51 @@
-import type { Generated } from 'kysely';
+import type { Database } from './database.js';
 import type { EventLog, Event, GetEventsOptions } from '@tbd54566975/dwn-sdk-js';
-
-import * as mysql2 from 'mysql2';
-
-import { Kysely, MysqlDialect } from 'kysely';
-
-interface EventLogTable {
-  id: Generated<number>;
-  tenant: string;
-  messageCid: string;
-}
-
-interface Database {
-  eventlog: EventLogTable;
-}
+import { Kysely } from 'kysely';
+import { Dialect } from './dialect/dialect.js';
 
 export class EventLogSql implements EventLog {
-  #db: Kysely<Database>;
-  #mysqlConnectionPool: mysql2.Pool;
+  #dialect: Dialect;
+  #db: Kysely<Database> | null = null;
 
-  constructor() {
-    // TODO: have `Kysely.Dialect` passed in as an arg by caller so that caller can choose
-    //       sql flavor and provide connection details
-    this.#mysqlConnectionPool = mysql2.createPool({
-      host     : 'localhost',
-      port     : 3306,
-      database : 'dwn',
-      user     : 'root',
-      password : 'dwn'
-    });
-
-    this.#db = new Kysely<Database>({
-      dialect: new MysqlDialect({
-        pool: this.#mysqlConnectionPool
-      })
-    });
+  constructor(dialect: Dialect) {
+    this.#dialect = dialect;
   }
-  async open(): Promise<void> {
-    // const connection = await this.#mysqlConnectionPool.getConnection();
-    // console.log('pinging mysql..');
-    // await connection.ping();
-    // console.log('ping successful! creating table if not exists');
 
-    await this.#db.schema
-      .createTable('eventlog')
+  async open(): Promise<void> {
+    if (this.#db) {
+      return;
+    }
+
+    this.#db = new Kysely<Database>({ dialect: this.#dialect });
+    let createTable = this.#db.schema
+      .createTable('eventLog')
       .ifNotExists()
-      .addColumn('id', 'integer', (col) => col.autoIncrement().primaryKey())
       .addColumn('tenant', 'text', (col) => col.notNull())
-      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
-      .execute();
+      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull());
+
+    // Add columns that have dialect-specific constraints
+    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
+
+    await createTable.execute();
   }
 
   async close(): Promise<void> {
-    this.#mysqlConnectionPool.end();
+    await this.#db?.destroy();
+    this.#db = null;
   }
 
   async append(
     tenant: string,
     messageCid: string
   ): Promise<string> {
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `append`.'
+      );
+    }
+
     const result = await this.#db
-      .insertInto('eventlog')
+      .insertInto('eventLog')
       .values({ tenant, messageCid })
       .executeTakeFirstOrThrow();
 
@@ -71,23 +56,38 @@ export class EventLogSql implements EventLog {
     tenant: string,
     options?: GetEventsOptions
   ): Promise<Array<Event>> {
-    const query = this.#db
-      .selectFrom('eventlog')
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `getEvents`.'
+      );
+    }
+
+    let query = this.#db
+      .selectFrom('eventLog')
       .selectAll()
       .where('tenant', '=', tenant);
 
     if (options && options.gt) {
-      query.where('id', '>', parseInt(options.gt));
+      query = query.where('id', '>', parseInt(options.gt));
     }
 
     const events: Event[] = [];
-    for await (let dbEvent of query.stream()) {
-      const event: Event = {
-        watermark  : dbEvent.id.toString(),
-        messageCid : dbEvent.messageCid
-      };
 
-      events.push(event);
+    if (this.#dialect.isStreamingSupported) {
+      for await (let result of query.stream()) {
+        events.push({
+          watermark  : result.id.toString(),
+          messageCid : result.messageCid
+        });
+      }
+    } else {
+      const results = await query.execute();
+      for (let result of results) {
+        events.push({
+          watermark  : result.id.toString(),
+          messageCid : result.messageCid
+        });
+      }
     }
 
     return events;
@@ -97,8 +97,18 @@ export class EventLogSql implements EventLog {
     tenant: string,
     cids: string[]
   ): Promise<number> {
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `deleteEventsByCid`.'
+      );
+    }
+
+    if (cids.length === 0) {
+      return 0;
+    }
+
     const result = await this.#db
-      .deleteFrom('eventlog')
+      .deleteFrom('eventLog')
       .where('tenant', '=', tenant)
       .where('messageCid', 'in', cids)
       .executeTakeFirstOrThrow();
@@ -108,6 +118,14 @@ export class EventLogSql implements EventLog {
   }
 
   async clear(): Promise<void> {
-    throw new Error('Method not implemented.');
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `clear`.'
+      );
+    }
+
+    await this.#db
+      .deleteFrom('eventLog')
+      .execute();
   }
 }
