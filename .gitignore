@@ -6,6 +6,7 @@ DATASTORE
 INDEX
 MESSAGESTORE
 EVENTLOG
+tests/compiled
 
 # sqlite
 dwn.sqlite
