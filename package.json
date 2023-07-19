@@ -3,10 +3,10 @@
   "type": "module",
   "version": "0.0.1",
   "module": "./dist/src/main.js",
-  "types": "./dist/src/main.d.ts",
+  "types": "./dist/types/src/main.d.ts",
   "exports": {
     "import": "./dist/src/main.js",
-    "types": "./dist/src/main.d.ts"
+    "types": "./dist/types/src/main.d.ts"
   },
   "dependencies": {
     "@tbd54566975/dids": "0.1.7",
