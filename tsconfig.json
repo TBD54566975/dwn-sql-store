@@ -12,6 +12,7 @@
     "outDir": "./dist",
     "sourceMap": true,
     "moduleResolution": "NodeNext",
+    "declarationDir": "./dist/types",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "strictNullChecks": true
