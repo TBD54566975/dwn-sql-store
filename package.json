@@ -2,6 +2,13 @@
   "name": "dwn-sql-store",
   "type": "module",
   "version": "0.0.1",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/TBD54566975/dwn-sql-store#readme",
+  "bugs": "https://github.com/TBD54566975/dwn-sql-store/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TBD54566975/dwn-sql-store.git"
+  },
   "module": "./dist/src/main.js",
   "types": "./dist/types/src/main.d.ts",
   "exports": {
@@ -47,5 +54,15 @@
   "files": [
     "dist",
     "src"
+  ],
+  "contributors": [
+    {
+      "name": "Adam Mika",
+      "url": "https://github.com/amika-sq"
+    },
+    {
+      "name": "Moe Jangda",
+      "url": "https://github.com/mistermoe"
+    }
   ]
 }
