@@ -40,8 +40,8 @@ jobs:
 
       - name: start containerized dbs
         run: |
-          apt update
-          apt install sqlite3
+          sudo apt update
+          sudo apt install sqlite3
           ./scripts/start-databases
       
       - name: Run tests
