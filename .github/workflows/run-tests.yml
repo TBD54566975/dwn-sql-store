@@ -39,7 +39,10 @@ jobs:
         run: npm run compile
 
       - name: start containerized dbs
-        run: ./scripts/start-databases
+        run: |
+          apt update
+          apt install sqlite3
+          ./scripts/start-databases
       
       - name: Run tests
         run: npm run test
