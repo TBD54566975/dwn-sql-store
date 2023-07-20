@@ -10,6 +10,7 @@
     "type": "git",
     "url": "git+https://github.com/TBD54566975/dwn-sql-store.git"
   },
+  "main": "./dist/src/main.js",
   "module": "./dist/src/main.js",
   "types": "./dist/types/src/main.d.ts",
   "exports": {
