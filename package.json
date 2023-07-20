@@ -1,7 +1,8 @@
 {
   "name": "@tbd54566975/dwn-sql-store",
-  "type": "module",
   "version": "0.0.1",
+  "description": "SQL backed implementations of DWN MessageStore, DataStore, and EventLog",
+  "type": "module",
   "license": "Apache-2.0",
   "homepage": "https://github.com/TBD54566975/dwn-sql-store#readme",
   "bugs": "https://github.com/TBD54566975/dwn-sql-store/issues",
