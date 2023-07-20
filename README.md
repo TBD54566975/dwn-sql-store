@@ -52,7 +52,7 @@ const sqliteDialect = new SqliteDialect({
 
 const messageStore = new MessageStoreSql(sqliteDialect);
 const dataStore = new DataStoreSql(sqliteDialect);
-const eventLog = new DataStoreSql(sqliteDialect);
+const eventLog = new EventLogSql(sqliteDialect);
 
 const dwn = await Dwn.create({ messageStore, dataStore, eventLog });
 ```
@@ -76,7 +76,7 @@ const mysqlDialect = new MysqlDialect({
 
 const messageStore = new MessageStoreSql(mysqlDialect);
 const dataStore = new DataStoreSql(mysqlDialect);
-const eventLog = new DataStoreSql(mysqlDialect);
+const eventLog = new EventLogSql(mysqlDialect);
 
 const dwn = await Dwn.create({ messageStore, dataStore, eventLog });
 ```
@@ -103,7 +103,7 @@ const postgresDialect = new PostgresDialect({
 
 const messageStore = new MessageStoreSql(postgresDialect);
 const dataStore = new DataStoreSql(postgresDialect);
-const eventLog = new DataStoreSql(postgresDialect);
+const eventLog = new EventLogSql(postgresDialect);
 
 const dwn = await Dwn.create({ messageStore, dataStore, eventLog });
 ```
