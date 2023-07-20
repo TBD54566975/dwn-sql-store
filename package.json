@@ -17,7 +17,6 @@
     "types": "./dist/types/src/main.d.ts"
   },
   "dependencies": {
-    "@tbd54566975/dids": "0.1.7",
     "@tbd54566975/dwn-sdk-js": "0.1.0",
     "kysely": "0.25.0",
     "multiformats": "12.0.1",
