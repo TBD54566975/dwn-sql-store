@@ -10,13 +10,13 @@
     "type": "git",
     "url": "git+https://github.com/TBD54566975/dwn-sql-store.git"
   },
-  "main": "./dist/src/main.js",
   "module": "./dist/src/main.js",
   "types": "./dist/types/src/main.d.ts",
   "exports": {
     "import": "./dist/src/main.js",
     "types": "./dist/types/src/main.d.ts"
   },
+  "react-native": "./dist/src/main.js",
   "dependencies": {
     "@tbd54566975/dwn-sdk-js": "0.1.0",
     "kysely": "0.25.0",
