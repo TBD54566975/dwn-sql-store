@@ -36,8 +36,8 @@ jobs:
       - name: Run audit checks
         run: npm audit
       
-      - name: Test compilation
-        run: npm run compile
+      - name: Test build
+        run: npm run build
 
       - name: start containerized dbs
         run: |

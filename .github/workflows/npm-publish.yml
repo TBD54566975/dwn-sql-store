@@ -76,7 +76,7 @@ jobs:
 
       - name: Build all workspace packages
         if: env.IS_LATEST == 'true'
-        run: npm run compile
+        run: npm run build
 
       - name: Publish @tbd54566975/dwn-sql-store@${{ env.REPO_VERSION }}
         if: env.IS_LATEST == 'true'

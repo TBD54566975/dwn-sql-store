@@ -140,8 +140,10 @@ Docker is used to spin up a local containerized DBs for testing purposes. Docker
 
 | Script                  | Description                                 |
 | ----------------------- | ------------------------------------------- |
-| `npm run compile`       | compiles typescript into ESM JS             |
-| `npm run clean`         | deletes compiled JS                         |
+| `npm run build:esm`    | compiles typescript into ESM JS                                    |
+| `npm run build:cjs`    | compiles typescript into CommonJS                                  |
+| `npm run build`        | compiles typescript into ESM JS & CommonJS                         |
+| `npm run clean`        | deletes compiled JS                                                |
 | `npm run test`          | runs tests.                                 |
 | `npm run test-coverage` | runs tests and includes coverage            |
 | `npm run lint`          | runs linter                                 |
