@@ -1,6 +1,6 @@
 {
   "name": "@tbd54566975/dwn-sql-store",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "SQL backed implementations of DWN MessageStore, DataStore, and EventLog",
   "type": "module",
   "license": "Apache-2.0",
@@ -10,13 +10,15 @@
     "type": "git",
     "url": "git+https://github.com/TBD54566975/dwn-sql-store.git"
   },
-  "module": "./dist/src/main.js",
+  "main": "./dist/cjs/main.js",
+  "module": "./dist/esm/src/main.js",
   "types": "./dist/types/src/main.d.ts",
   "exports": {
-    "import": "./dist/src/main.js",
+    "import": "./dist/esm/src/main.js",
+    "require": "./dist/cjs/main.js",
     "types": "./dist/types/src/main.d.ts"
   },
-  "react-native": "./dist/src/main.js",
+  "react-native": "./dist/esm/src/main.js",
   "dependencies": {
     "@tbd54566975/dwn-sdk-js": "0.1.0",
     "kysely": "0.25.0",
@@ -39,6 +41,7 @@
     "c8": "8.0.0",
     "chai": "4.3.6",
     "chai-as-promised": "7.1.1",
+    "esbuild": "^0.19.3",
     "eslint": "8.42.0",
     "mocha": "10.2.0",
     "mysql2": "3.5.2",
@@ -49,8 +52,10 @@
     "typescript": "5.0.4"
   },
   "scripts": {
+    "build:esm": "npm run clean & tsc",
+    "build:cjs": "npm run build:esm && node build/create-cjs-bundle.cjs && echo '{\"type\": \"commonjs\"}' > ./dist/cjs/package.json",
+    "build": "npm run clean && npm run build:esm && npm run build:cjs",
     "clean": "rimraf dist compiled",
-    "compile": "npm run clean && tsc",
     "lint": "eslint . --ext .ts --max-warnings 0",
     "lint:fix": "eslint . --ext .ts --fix",
     "test": "rimraf compiled && tsc -p tests/tsconfig.json && mocha",
@@ -68,6 +73,10 @@
     {
       "name": "Moe Jangda",
       "url": "https://github.com/mistermoe"
+    },
+    {
+      "name": "Adam Leos",
+      "url": "https://github.com/adam4leos"
     }
   ]
 }
