@@ -1,4 +1,10 @@
-import { executeUnlessAborted, Filter, GenericMessage, MessageStore, MessageStoreOptions } from '@tbd54566975/dwn-sdk-js';
+import {
+  executeUnlessAborted,
+  Filter,
+  GenericMessage,
+  MessageStore,
+  MessageStoreOptions,
+} from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Database } from './database.js';
 import * as block from 'multiformats/block';
@@ -138,11 +144,27 @@ export class MessageStoreSql implements MessageStore {
     return this.parseEncodedMessage(result.encodedMessageBytes, options);
   }
 
+  private getOrderBy(
+    messageSort?: MessageSort
+  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortOrder } {
+    if(messageSort?.dateCreated !== undefined)  {
+      return  { property: 'dateCreated', direction: messageSort.dateCreated };
+    } else if(messageSort?.datePublished !== undefined) {
+      return  { property: 'datePublished', direction: messageSort.datePublished };
+    } else if (messageSort?.messageTimestamp !== undefined) {
+      return  { property: 'messageTimestamp', direction: messageSort.messageTimestamp };
+    } else {
+      return  { property: 'messageTimestamp', direction: SortOrder.Ascending };
+    }
+  }
+
   async query(
     tenant: string,
-    filter: Filter,
+    filters: Filter[],
+    messageSort?: MessageSort,
+    pagination?: Pagination,
     options?: MessageStoreOptions
-  ): Promise<GenericMessage[]> {
+  ): Promise<{ messages: GenericMessage[], paginationMessageCid?: string }> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `query`.'
@@ -151,23 +173,32 @@ export class MessageStoreSql implements MessageStore {
 
     options?.signal?.throwIfAborted();
 
+    const {property, direction} = this.getOrderBy(messageSort);
     let query = this.#db
       .selectFrom('messageStore')
       .selectAll()
       .where('tenant', '=', tenant);
 
-    query = filterSelectQuery(filter, query);
+    query = filterSelectQuery(filters, query);
+    query =  query
+      .orderBy(property, direction === SortOrder.Ascending ? 'asc' : 'desc')
+      .orderBy('messageCid', 'desc');
+
+    if (pagination?.limit !== undefined) {
+      query = query.limit(pagination.limit);
+    }
 
     const results = await executeUnlessAborted(
       query.execute(),
       options?.signal
     );
 
-    const messages = results.map(async (result) => {
-      return this.parseEncodedMessage(result.encodedMessageBytes, options);
-    });
+    const messages:GenericMessage[] = [];
+    for (const result of results) {
+      messages.push(await this.parseEncodedMessage(result.encodedMessageBytes, options));
+    }
 
-    return await Promise.all(messages);
+    return { messages: (await Promise.all(messages)) };
   }
 
   async delete(
@@ -222,3 +253,19 @@ export class MessageStoreSql implements MessageStore {
   }
 
 }
+
+export type Pagination = {
+  messageCid?: string
+  limit?: number
+};
+
+export enum SortOrder {
+  Descending = -1,
+  Ascending = 1
+}
+
+export type MessageSort = {
+  dateCreated?: SortOrder;
+  datePublished?: SortOrder;
+  messageTimestamp?: SortOrder;
+};

@@ -3,13 +3,17 @@ import { DynamicModule, SelectQueryBuilder } from 'kysely';
 import { sanitizedString } from './sanitize.js';
 
 export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, O = unknown>(
-  filter: Filter,
+  filters: Filter[],
   query: SelectQueryBuilder<DB, TB, O>
 ): SelectQueryBuilder<DB, TB, O> {
+  if (filters.length === 0) {
+    return query;
+  }
+  const filter = filters[0];
+  // for (let filter of filters) {
   for (let property in filter) {
     const value = filter[property];
     const column = new DynamicModule().ref(property);
-
     if (Array.isArray(value)) { // OneOfFilter
       query = query.where(column, 'in', value);
     } else if (typeof value === 'object') { // RangeFilter
@@ -29,6 +33,7 @@ export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, 
       query = query.where(column, '=', sanitizedString(value));
     }
   }
+  // }
 
   return query;
 }
