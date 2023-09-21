@@ -2,6 +2,7 @@ import {
   executeUnlessAborted,
   Filter,
   GenericMessage,
+  Message,
   MessageStore,
   MessageStoreOptions,
 } from '@tbd54566975/dwn-sdk-js';
@@ -179,26 +180,40 @@ export class MessageStoreSql implements MessageStore {
       .selectAll()
       .where('tenant', '=', tenant);
 
+    if(pagination?.messageCid !== undefined) {
+      query = query.where(eb =>
+        eb.cmpr('messageTimestamp', '>',
+          eb.selectFrom('messageStore').select('messageTimestamp').where('messageCid', '=', pagination.messageCid!).limit(1),
+        )
+      );
+    }
+
     query = filterSelectQuery(filters, query);
     query =  query
       .orderBy(property, direction === SortOrder.Ascending ? 'asc' : 'desc')
       .orderBy('messageCid', 'desc');
 
-    if (pagination?.limit !== undefined) {
-      query = query.limit(pagination.limit);
+    if (pagination?.limit !== undefined && pagination?.limit > 0) {
+      // we grab one additional record to decide if we return a cursor or not.
+      query = query.limit(pagination.limit + 1);
     }
 
     const results = await executeUnlessAborted(
       query.execute(),
       options?.signal
     );
-
     const messages:GenericMessage[] = [];
     for (const result of results) {
       messages.push(await this.parseEncodedMessage(result.encodedMessageBytes, options));
     }
+    let paginationMessageCid: string|undefined;
+    if (pagination?.limit !== undefined && messages.length > pagination.limit) {
+      messages.splice(messages.length - 1);
+      const lastMessage = messages.at(-1)!;
+      paginationMessageCid = await Message.getCid(lastMessage);
+    }
 
-    return { messages: (await Promise.all(messages)) };
+    return { messages, paginationMessageCid };
   }
 
   async delete(
