@@ -21,7 +21,7 @@
   "react-native": "./dist/esm/src/main.js",
   "dependencies": {
     "@tbd54566975/dwn-sdk-js": "0.1.0",
-    "kysely": "0.25.0",
+    "kysely": "0.26.3",
     "multiformats": "12.0.1",
     "readable-stream": "4.4.2"
   },
