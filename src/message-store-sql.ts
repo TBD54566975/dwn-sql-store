@@ -1,10 +1,15 @@
 import {
+  DwnInterfaceName,
+  DwnMethodName,
   executeUnlessAborted,
   Filter,
   GenericMessage,
   Message,
   MessageStore,
   MessageStoreOptions,
+  MessageSort,
+  Pagination,
+  SortOrder
 } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Database } from './database.js';
@@ -35,6 +40,7 @@ export class MessageStoreSql implements MessageStore {
       .ifNotExists()
       .addColumn('tenant', 'text', (col) => col.notNull())
       .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
+      .addColumn('encodedData', 'text') // we optionally store encoded data if it is below a threshold
       // "indexes" start
       .addColumn('interface', 'text')
       .addColumn('method', 'text')
@@ -92,14 +98,30 @@ export class MessageStoreSql implements MessageStore {
 
     options?.signal?.throwIfAborted();
 
+    // gets the encoded data and removes it from the message
+    const getEncodedData = (message: GenericMessage): { message: GenericMessage, encodedData: string|null} => {
+      let encodedData: string|null = null;
+      if (message.descriptor.interface === DwnInterfaceName.Records && message.descriptor.method === DwnMethodName.Write) {
+        const data = (message as any).encodedData as string|undefined;
+        if(data) {
+          delete (message as any).encodedData;
+          encodedData = data;
+        }
+      }
+      return { message, encodedData };
+    };
+
+    const { message: messageToProcess, encodedData} = getEncodedData(message);
+
     const encodedMessageBlock = await executeUnlessAborted(
-      block.encode({ value: message, codec: cbor, hasher: sha256}),
+      block.encode({ value: messageToProcess, codec: cbor, hasher: sha256}),
       options?.signal
     );
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
     sanitizeRecords(indexes);
+
 
     await executeUnlessAborted(
       this.#db
@@ -108,7 +130,8 @@ export class MessageStoreSql implements MessageStore {
           tenant,
           messageCid,
           encodedMessageBytes,
-          ...indexes,
+          encodedData,
+          ...indexes
         })
         .executeTakeFirstOrThrow(),
       options?.signal
@@ -142,21 +165,7 @@ export class MessageStoreSql implements MessageStore {
       return undefined;
     }
 
-    return this.parseEncodedMessage(result.encodedMessageBytes, options);
-  }
-
-  private getOrderBy(
-    messageSort?: MessageSort
-  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortOrder } {
-    if(messageSort?.dateCreated !== undefined)  {
-      return  { property: 'dateCreated', direction: messageSort.dateCreated };
-    } else if(messageSort?.datePublished !== undefined) {
-      return  { property: 'datePublished', direction: messageSort.datePublished };
-    } else if (messageSort?.messageTimestamp !== undefined) {
-      return  { property: 'messageTimestamp', direction: messageSort.messageTimestamp };
-    } else {
-      return  { property: 'messageTimestamp', direction: SortOrder.Ascending };
-    }
+    return this.parseEncodedMessage(result.encodedMessageBytes, result.encodedData, options);
   }
 
   async query(
@@ -174,24 +183,40 @@ export class MessageStoreSql implements MessageStore {
 
     options?.signal?.throwIfAborted();
 
-    const {property, direction} = this.getOrderBy(messageSort);
     let query = this.#db
       .selectFrom('messageStore')
       .selectAll()
       .where('tenant', '=', tenant);
 
-    if(pagination?.messageCid !== undefined) {
-      query = query.where(eb =>
-        eb.cmpr('messageTimestamp', '>',
-          eb.selectFrom('messageStore').select('messageTimestamp').where('messageCid', '=', pagination.messageCid!).limit(1),
-        )
-      );
+    // if query is sorted by date published, only show records which are published
+    if(messageSort?.datePublished !== undefined) {
+      query = query.where('published', '=', 'true');
     }
 
     query = filterSelectQuery(filters, query);
+    const { property: sortProperty, direction: sortDirection } = this.getOrderBy(messageSort);
+
+    if(pagination?.messageCid !== undefined) {
+
+      const messageCid = pagination.messageCid;
+      query = query.where(({ eb, selectFrom, refTuple }) => {
+        const direction = sortDirection === SortOrder.Ascending ? '>' : '<';
+
+        // fetches the sort property tuple from the database based on the messageCid.
+        const cursor = selectFrom('messageStore')
+          .select([sortProperty, 'messageCid'])
+          .where('tenant', '=', tenant)
+          .where('messageCid', '=', messageCid)
+          .limit(1).$asTuple(sortProperty, 'messageCid');
+
+        return eb(refTuple(sortProperty, 'messageCid'), direction, cursor);
+      });
+    }
+
+    // sorting by the provided sort property, the tiebreak is always in ascending order regardless of sort
     query =  query
-      .orderBy(property, direction === SortOrder.Ascending ? 'asc' : 'desc')
-      .orderBy('messageCid', 'desc');
+      .orderBy(sortProperty, sortDirection === SortOrder.Ascending ? 'asc' : 'desc')
+      .orderBy('messageCid', 'asc');
 
     if (pagination?.limit !== undefined && pagination?.limit > 0) {
       // we grab one additional record to decide if we return a cursor or not.
@@ -202,18 +227,11 @@ export class MessageStoreSql implements MessageStore {
       query.execute(),
       options?.signal
     );
-    const messages:GenericMessage[] = [];
-    for (const result of results) {
-      messages.push(await this.parseEncodedMessage(result.encodedMessageBytes, options));
-    }
-    let paginationMessageCid: string|undefined;
-    if (pagination?.limit !== undefined && messages.length > pagination.limit) {
-      messages.splice(messages.length - 1);
-      const lastMessage = messages.at(-1)!;
-      paginationMessageCid = await Message.getCid(lastMessage);
-    }
 
-    return { messages, paginationMessageCid };
+    const messages: Promise<GenericMessage>[] = results.map((r:any) => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
+
+    // returns the pruned the messages and a potential paginationMessageCid
+    return this.getPaginationResults(messages,  pagination?.limit);
   }
 
   async delete(
@@ -253,6 +271,7 @@ export class MessageStoreSql implements MessageStore {
 
   private async parseEncodedMessage(
     encodedMessageBytes: Uint8Array,
+    encodedData: string | null | undefined,
     options?: MessageStoreOptions
   ): Promise<GenericMessage> {
     options?.signal?.throwIfAborted();
@@ -264,23 +283,46 @@ export class MessageStoreSql implements MessageStore {
     });
 
     const message = decodedBlock.value as GenericMessage;
+    if (message !== undefined && encodedData !== undefined && encodedData !== null) {
+      (message as any).encodedData = encodedData;
+    }
     return message;
   }
 
+  /**
+   * Gets the pagination Message Cid if there is messages to paginate. Accepts more messages than the limit.
+   *
+   * @param messages a list of messages, potentially larger than the provided limit.
+   * @param limit the maximum number of messages to be returned
+   *
+   * @returns the pruned message results and an optional paginationMessageCid
+   */
+  private async getPaginationResults(
+    messages: Promise<GenericMessage>[], limit?: number
+  ): Promise<{ messages: GenericMessage[], paginationMessageCid?: string }>{
+    if (limit !== undefined && messages.length > limit) {
+      messages = messages.slice(0, limit);
+      const lastMessage = messages.at(-1);
+      return {
+        messages             : await Promise.all(messages),
+        paginationMessageCid : lastMessage ? await Message.getCid(await lastMessage) : undefined
+      };
+    }
+
+    return { messages: await Promise.all(messages) };
+  }
+
+  private getOrderBy(
+    messageSort?: MessageSort
+  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortOrder } {
+    if(messageSort?.dateCreated !== undefined)  {
+      return  { property: 'dateCreated', direction: messageSort.dateCreated };
+    } else if(messageSort?.datePublished !== undefined) {
+      return  { property: 'datePublished', direction: messageSort.datePublished };
+    } else if (messageSort?.messageTimestamp !== undefined) {
+      return  { property: 'messageTimestamp', direction: messageSort.messageTimestamp };
+    } else {
+      return  { property: 'messageTimestamp', direction: SortOrder.Ascending };
+    }
+  }
 }
-
-export type Pagination = {
-  messageCid?: string
-  limit?: number
-};
-
-export enum SortOrder {
-  Descending = -1,
-  Ascending = 1
-}
-
-export type MessageSort = {
-  dateCreated?: SortOrder;
-  datePublished?: SortOrder;
-  messageTimestamp?: SortOrder;
-};
