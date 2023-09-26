@@ -7,8 +7,8 @@ import { sanitizedString } from './sanitize.js';
  * Each filter is evaluated as an OR operation.
  *
  * @param filters Array of filters to be evaluated as OR operations
- * @param query the QueryBuilder.
- * @returns The modified QueryBuilder.
+ * @param query the incoming QueryBuilder.
+ * @returns The modified QueryBuilder respecting the provided filters.
  */
 export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, O = unknown>(
   filters: Filter[],
@@ -18,9 +18,7 @@ export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, 
     // we are building multiple OR queries out of each individual filter.
     const or: OperandExpression<SqlBool>[] = [];
     for (let filter of filters) {
-      // processFilter will take a single filter and create AND operations from each property.
-      // if an array of values are passed for a property, it will treat it as an OR(IN) within the individual filter property.
-      // it returns a single OperandExpression to be evaluated.
+      // processFilter will take a single filter adding it to the query to be evaluated as an OR operation with the other filters.
       or.push(processFilter(eb, filter));
     }
     // Evaluate the array of expressions as an OR operation.
@@ -30,7 +28,8 @@ export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, 
 
 /**
  * Returns an array of OperandExpressions for a single filter.
- * Each property within the filter is evaluated as an AND operand.
+ * Each property within the filter is evaluated as an AND operand,
+ * if a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
  * This way each Filer has to be a complete match, but the collection of filters can be evaluated as chosen.
  *
  * @param eb The ExpressionBuilder from the query.

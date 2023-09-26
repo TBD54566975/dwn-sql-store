@@ -193,22 +193,25 @@ export class MessageStoreSql implements MessageStore {
       query = query.where('published', '=', 'true');
     }
 
+    // add filters to query
     query = filterSelectQuery(filters, query);
+
+    // extract sort property and direction from the supplied messageSort
     const { property: sortProperty, direction: sortDirection } = this.getOrderBy(messageSort);
 
     if(pagination?.messageCid !== undefined) {
-
       const messageCid = pagination.messageCid;
       query = query.where(({ eb, selectFrom, refTuple }) => {
         const direction = sortDirection === SortOrder.Ascending ? '>' : '<';
 
-        // fetches the sort property tuple from the database based on the messageCid.
+        // fetches the cursor as a sort property tuple from the database based on the messageCid.
         const cursor = selectFrom('messageStore')
           .select([sortProperty, 'messageCid'])
           .where('tenant', '=', tenant)
           .where('messageCid', '=', messageCid)
           .limit(1).$asTuple(sortProperty, 'messageCid');
 
+        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
         return eb(refTuple(sortProperty, 'messageCid'), direction, cursor);
       });
     }
@@ -219,7 +222,7 @@ export class MessageStoreSql implements MessageStore {
       .orderBy('messageCid', 'asc');
 
     if (pagination?.limit !== undefined && pagination?.limit > 0) {
-      // we grab one additional record to decide if we return a cursor or not.
+      // we query for one additional record to decide if we return a pagination cursor or not.
       query = query.limit(pagination.limit + 1);
     }
 
@@ -228,9 +231,10 @@ export class MessageStoreSql implements MessageStore {
       options?.signal
     );
 
+    // extracts the full encoded message from the stored blob for each result item.
     const messages: Promise<GenericMessage>[] = results.map((r:any) => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
 
-    // returns the pruned the messages and a potential paginationMessageCid
+    // returns the pruned the messages, since we have and additional record from above, and a potential paginationMessageCid
     return this.getPaginationResults(messages,  pagination?.limit);
   }
 
@@ -283,6 +287,9 @@ export class MessageStoreSql implements MessageStore {
     });
 
     const message = decodedBlock.value as GenericMessage;
+    // If encodedData is stored within the MessageStore we include it in the response.
+    // We store encodedData when the data is below a certain threshold.
+    // https://github.com/TBD54566975/dwn-sdk-js/pull/456
     if (message !== undefined && encodedData !== undefined && encodedData !== null) {
       (message as any).encodedData = encodedData;
     }
@@ -290,7 +297,8 @@ export class MessageStoreSql implements MessageStore {
   }
 
   /**
-   * Gets the pagination Message Cid if there is messages to paginate. Accepts more messages than the limit.
+   * Gets the pagination Message Cid if there are additional messages to paginate.
+   * Accepts more messages than the limit, as we query for additional records to check if we should paginate.
    *
    * @param messages a list of messages, potentially larger than the provided limit.
    * @param limit the maximum number of messages to be returned
