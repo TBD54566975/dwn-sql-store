@@ -11,6 +11,7 @@ export interface MessageStoreTable {
   tenant: string;
   messageCid: string;
   encodedMessageBytes: Uint8Array;
+  encodedData: string | null;
   // "indexes" start
   interface: string | null;
   method: string | null;
