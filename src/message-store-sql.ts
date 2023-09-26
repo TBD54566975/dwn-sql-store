@@ -99,6 +99,8 @@ export class MessageStoreSql implements MessageStore {
     options?.signal?.throwIfAborted();
 
     // gets the encoded data and removes it from the message
+    // we remove it from the message as it would cause the `encodedMessageBytes` to be greater than the
+    // maximum bytes allowed by SQL
     const getEncodedData = (message: GenericMessage): { message: GenericMessage, encodedData: string|null} => {
       let encodedData: string|null = null;
       if (message.descriptor.interface === DwnInterfaceName.Records && message.descriptor.method === DwnMethodName.Write) {
