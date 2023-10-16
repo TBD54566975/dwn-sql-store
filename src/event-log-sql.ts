@@ -1,7 +1,8 @@
 import type { Database } from './database.js';
-import type { EventLog, Event, GetEventsOptions } from '@tbd54566975/dwn-sdk-js';
-import { Kysely } from 'kysely';
+import type { EventLog, Event, GetEventsOptions, FilteredQuery } from '@tbd54566975/dwn-sdk-js';
+import { Kysely, OperandExpression, SqlBool } from 'kysely';
 import { Dialect } from './dialect/dialect.js';
+import { processFilter } from './utils/filter.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
@@ -21,7 +22,35 @@ export class EventLogSql implements EventLog {
       .createTable('eventLog')
       .ifNotExists()
       .addColumn('tenant', 'text', (col) => col.notNull())
-      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull());
+      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
+      .addColumn('interface', 'text')
+      .addColumn('method', 'text')
+      .addColumn('schema', 'text')
+      .addColumn('dataCid', 'text')
+      .addColumn('dataSize', 'text')
+      .addColumn('dateCreated', 'text')
+      .addColumn('messageTimestamp', 'text')
+      .addColumn('dataFormat', 'text')
+      .addColumn('isLatestBaseState', 'text')
+      .addColumn('published', 'text')
+      .addColumn('author', 'text')
+      .addColumn('recordId', 'text')
+      .addColumn('entryId', 'text')
+      .addColumn('datePublished', 'text')
+      .addColumn('latest', 'text')
+      .addColumn('protocol', 'text')
+      .addColumn('dateExpires', 'text')
+      .addColumn('description', 'text')
+      .addColumn('grantedTo', 'text')
+      .addColumn('grantedBy', 'text')
+      .addColumn('grantedFor', 'text')
+      .addColumn('permissionsRequestId', 'text')
+      .addColumn('attester', 'text')
+      .addColumn('protocolPath', 'text')
+      .addColumn('recipient', 'text')
+      .addColumn('contextId', 'text')
+      .addColumn('parentId', 'text')
+      .addColumn('permissionsGrantId', 'text');
 
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
@@ -36,7 +65,8 @@ export class EventLogSql implements EventLog {
 
   async append(
     tenant: string,
-    messageCid: string
+    messageCid: string,
+    indexes: Record<string, string>,
   ): Promise<string> {
     if (!this.#db) {
       throw new Error(
@@ -46,7 +76,11 @@ export class EventLogSql implements EventLog {
 
     const result = await this.#db
       .insertInto('eventLog')
-      .values({ tenant, messageCid })
+      .values({
+        tenant,
+        messageCid,
+        ...indexes
+      })
       .executeTakeFirstOrThrow();
 
     return result.insertId?.toString() ?? '';
@@ -90,6 +124,63 @@ export class EventLogSql implements EventLog {
       }
     }
 
+    return events;
+  }
+
+  async queryEvents(tenant: string, filters: FilteredQuery[]): Promise<Array<Event>> {
+
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `queryEvents`.'
+      );
+    }
+
+    let query = this.#db
+      .selectFrom('eventLog')
+      .select('id')
+      .distinct()
+      .select('messageCid')
+      .where('tenant', '=', tenant);
+
+    query = query.where(({ or, selectFrom, eb }) => {
+      const orOperands: OperandExpression<SqlBool>[] = [];
+      for (const queryFilter of filters) {
+        const { filter, cursor } = queryFilter;
+        let subQuery = selectFrom('eventLog')
+          .select('id')
+          .where(seb => processFilter(seb, filter));
+
+        if(cursor !== undefined && !isNaN(parseInt(cursor)))  {
+          subQuery = subQuery.where('id', '>', parseInt(cursor));
+        }
+
+        orOperands.push(eb(
+          'id',
+          'in',
+          subQuery
+        ));
+      }
+      return or(orOperands);
+    });
+
+    query = query.orderBy('id', 'asc');
+    const events: Event[] = [];
+    if (this.#dialect.isStreamingSupported) {
+      for await (let result of query.stream()) {
+        events.push({
+          watermark  : result.id.toString(),
+          messageCid : result.messageCid
+        });
+      }
+    } else {
+      const results = await query.execute();
+      for (let result of results) {
+        events.push({
+          watermark  : result.id.toString(),
+          messageCid : result.messageCid
+        });
+      }
+    }
     return events;
   }
 

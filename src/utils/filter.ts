@@ -36,7 +36,7 @@ export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, 
  * @param filter The filter to be evaluated.
  * @returns An array of OperandExpressions to be evaluated by the caller.
  */
-function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
+export function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
   filter: Filter
 ):OperandExpression<SqlBool> {
