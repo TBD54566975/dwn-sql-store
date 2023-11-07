@@ -1,6 +1,6 @@
 import { Filter } from '@tbd54566975/dwn-sdk-js';
 import { DynamicModule, ExpressionBuilder, OperandExpression, SelectQueryBuilder, SqlBool } from 'kysely';
-import { sanitizedString } from './sanitize.js';
+import { sanitizedValue } from './sanitize.js';
 
 /**
  * Takes multiple Filters and returns a single query.
@@ -48,19 +48,19 @@ function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
       andOperands.push(eb(column, 'in', value));
     } else if (typeof value === 'object') { // RangeFilter
       if (value.gt) {
-        andOperands.push(eb(column, '>', sanitizedString(value.gt)));
+        andOperands.push(eb(column, '>', sanitizedValue(value.gt)));
       }
       if (value.gte) {
-        andOperands.push(eb(column, '>=', sanitizedString(value.gte)));
+        andOperands.push(eb(column, '>=', sanitizedValue(value.gte)));
       }
       if (value.lt) {
-        andOperands.push(eb(column, '<', sanitizedString(value.lt)));
+        andOperands.push(eb(column, '<', sanitizedValue(value.lt)));
       }
       if (value.lte) {
-        andOperands.push(eb(column, '<=', sanitizedString(value.lte)));
+        andOperands.push(eb(column, '<=', sanitizedValue(value.lte)));
       }
     } else { // EqualFilter
-      andOperands.push(eb(column, '=', sanitizedString(value)));
+      andOperands.push(eb(column, '=', sanitizedValue(value)));
     }
   }
 
