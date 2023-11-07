@@ -17,7 +17,7 @@ export interface MessageStoreTable {
   method: string | null;
   schema: string | null;
   dataCid: string | null;
-  dataSize: string | null;
+  dataSize: number | null;
   dateCreated: string | null;
   messageTimestamp: string | null;
   dataFormat: string | null;
