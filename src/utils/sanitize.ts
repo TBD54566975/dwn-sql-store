@@ -5,6 +5,8 @@ export function sanitizeRecords(records: Record<string, string | number>) {
   }
 }
 
+// we only use strings and numbers (integers) within this store.
+// anything that isn't explicitly a string or a number, becomes a json string.
 export function sanitizedValue(value: any): string | number {
   if (typeof value === 'string') {
     return value;
