@@ -176,7 +176,7 @@ export class MessageStoreSql implements MessageStore {
     messageSort?: MessageSort,
     pagination?: Pagination,
     options?: MessageStoreOptions
-  ): Promise<{ messages: GenericMessage[], paginationMessageCid?: string }> {
+  ): Promise<{ messages: GenericMessage[], cursor?: string }> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `query`.'
@@ -201,8 +201,8 @@ export class MessageStoreSql implements MessageStore {
     // extract sort property and direction from the supplied messageSort
     const { property: sortProperty, direction: sortDirection } = this.getOrderBy(messageSort);
 
-    if(pagination?.messageCid !== undefined) {
-      const messageCid = pagination.messageCid;
+    if(pagination?.cursor !== undefined) {
+      const messageCid = pagination.cursor;
       query = query.where(({ eb, selectFrom, refTuple }) => {
         const direction = sortDirection === SortOrder.Ascending ? '>' : '<';
 
@@ -236,7 +236,7 @@ export class MessageStoreSql implements MessageStore {
     // extracts the full encoded message from the stored blob for each result item.
     const messages: Promise<GenericMessage>[] = results.map((r:any) => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
 
-    // returns the pruned the messages, since we have and additional record from above, and a potential paginationMessageCid
+    // returns the pruned the messages, since we have and additional record from above, and a potential messageCid cursor
     return this.getPaginationResults(messages,  pagination?.limit);
   }
 
@@ -305,17 +305,17 @@ export class MessageStoreSql implements MessageStore {
    * @param messages a list of messages, potentially larger than the provided limit.
    * @param limit the maximum number of messages to be returned
    *
-   * @returns the pruned message results and an optional paginationMessageCid
+   * @returns the pruned message results and an optional messageCid cursor
    */
   private async getPaginationResults(
     messages: Promise<GenericMessage>[], limit?: number
-  ): Promise<{ messages: GenericMessage[], paginationMessageCid?: string }>{
+  ): Promise<{ messages: GenericMessage[], cursor?: string }>{
     if (limit !== undefined && messages.length > limit) {
       messages = messages.slice(0, limit);
       const lastMessage = messages.at(-1);
       return {
-        messages             : await Promise.all(messages),
-        paginationMessageCid : lastMessage ? await Message.getCid(await lastMessage) : undefined
+        messages : await Promise.all(messages),
+        cursor   : lastMessage ? await Message.getCid(await lastMessage) : undefined
       };
     }
 
