@@ -112,7 +112,8 @@ const dwn = await Dwn.create({ messageStore, dataStore, eventLog });
 
 ## Prerequisites
 ### `node` and `npm`
-This project is using `node v20.3.0` and `npm v9.6.7`. You can verify your `node` and `npm` installation via the terminal:
+This project is developed and tested with [Node.js](https://nodejs.org/en/about/previous-releases)
+`v18` and `v20` and NPM `v9`. You can verify your `node` and `npm` installation via the terminal:
 
 ```
 $ node --version

@@ -1,6 +1,6 @@
 {
   "name": "@tbd54566975/dwn-sql-store",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "SQL backed implementations of DWN MessageStore, DataStore, and EventLog",
   "type": "module",
   "license": "Apache-2.0",
@@ -21,7 +21,7 @@
   "react-native": "./dist/esm/src/main.js",
   "dependencies": {
     "@ipld/dag-cbor": "^9.0.5",
-    "@tbd54566975/dwn-sdk-js": "0.2.6",
+    "@tbd54566975/dwn-sdk-js": "0.2.7",
     "kysely": "0.26.3",
     "multiformats": "12.0.1",
     "readable-stream": "4.4.2"
@@ -34,7 +34,7 @@
     "@types/node": "20.3.1",
     "@types/pg": "8.10.2",
     "@types/pg-cursor": "2.7.0",
-    "@types/readable-stream": "2.3.15",
+    "@types/readable-stream": "4.0.6",
     "@types/supertest": "2.0.12",
     "@typescript-eslint/eslint-plugin": "5.59.11",
     "@typescript-eslint/parser": "5.59.11",
@@ -66,6 +66,9 @@
     "dist",
     "src"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "contributors": [
     {
       "name": "Adam Mika",
@@ -74,10 +77,6 @@
     {
       "name": "Moe Jangda",
       "url": "https://github.com/mistermoe"
-    },
-    {
-      "name": "Adam Leos",
-      "url": "https://github.com/adam4leos"
     },
     {
       "name": "Liran Cohen",
