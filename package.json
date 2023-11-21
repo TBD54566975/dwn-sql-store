@@ -66,6 +66,9 @@
     "dist",
     "src"
   ],
+  "engines": {
+    "node": ">=18"
+  },
   "contributors": [
     {
       "name": "Adam Mika",
