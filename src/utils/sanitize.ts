@@ -7,24 +7,25 @@ export function sanitizeIndexes(records: Record<string, string | number | boolea
   }
 }
 
-export function sanitizedValue(value: any): string | number {
-  if (typeof value === 'string') {
+// we sanitize the incoming value into a string or number
+// sqlite3 and the driver we use does not support booleans, so we convert them to strings
+export function sanitizedValue(value: string | number | boolean): string | number {
+  switch (typeof value) {
+  case 'boolean':
+    return String(value);
+  default:
     return value;
-  } else if (typeof value === 'number') {
-    return value;
-  } else {
-    return JSON.stringify(value);
   }
 }
 
+// we sanitize the filter value for a string representation of the boolean
+// TODO: export filter types from `dwn-sdk-js`
 export function sanitizeFilterValue(value: any): any {
   switch (typeof value) {
-  case 'number':
-  case 'string':
-  case 'object':
-    return  value;
+  case 'boolean':
+    return String(value);
   default:
-    return JSON.stringify(value);
+    return value;
   }
 }
 
