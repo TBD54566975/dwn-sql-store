@@ -3,11 +3,7 @@ import type { EventLog, GetEventsOptions, Filter } from '@tbd54566975/dwn-sdk-js
 import { Kysely } from 'kysely';
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
-
-type KeyValues = {
-  [key:string]: string | number | boolean
-};
-
+import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
@@ -70,12 +66,18 @@ export class EventLogSql implements EventLog {
     this.#db = null;
   }
 
-  async append(tenant: string, messageCid: string, indexes: KeyValues): Promise<void> {
+  async append(
+    tenant: string,
+    messageCid: string,
+    indexes: Record<string, string | boolean | number>
+  ): Promise<void> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `append`.'
       );
     }
+
+    sanitizeIndexes(indexes);
 
     await this.#db
       .insertInto('eventLog')
@@ -83,57 +85,23 @@ export class EventLogSql implements EventLog {
         tenant,
         messageCid,
         ...indexes
-      }).executeTakeFirstOrThrow();
+      }).execute();
   }
 
   async getEvents(
     tenant: string,
     options?: GetEventsOptions
   ): Promise<string[]> {
-    if (!this.#db) {
-      throw new Error(
-        'Connection to database not open. Call `open` before using `getEvents`.'
-      );
-    }
 
-    let query = this.#db
-      .selectFrom('eventLog')
-      .selectAll()
-      .where('tenant', '=', tenant);
-
-    if (options && options.cursor) {
-      const messageCid = options.cursor;
-      query = query.where(({ eb, selectFrom, refTuple }) => {
-
-        // fetches the cursor as a sort property tuple from the database based on the messageCid.
-        const cursor = selectFrom('eventLog')
-          .select(['watermark', 'messageCid'])
-          .where('tenant', '=', tenant)
-          .where('messageCid', '=', messageCid)
-          .limit(1).$asTuple('watermark', 'messageCid');
-
-        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple('watermark', 'messageCid'), '>' , cursor);
-      });
-    }
-
-    const events: string[] = [];
-
-    if (this.#dialect.isStreamingSupported) {
-      for await (let { messageCid } of query.stream()) {
-        events.push(messageCid);
-      }
-    } else {
-      const results = await query.execute();
-      for (let { messageCid } of results) {
-        events.push(messageCid);
-      }
-    }
-
-    return events;
+    // get events is simply a query without any filters. gets all events beyond the cursor.
+    return this.queryEvents(tenant, [], options?.cursor);
   }
 
-  async queryEvents(tenant: string, filters: Filter[], cursor?: string): Promise<string[]> {
+  async queryEvents(
+    tenant: string,
+    filters: Filter[],
+    cursor?: string
+  ): Promise<string[]> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `queryEvents`.'
@@ -146,26 +114,27 @@ export class EventLogSql implements EventLog {
       .where('tenant', '=', tenant);
 
     if (filters.length > 0) {
+      // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
+      sanitizeFilters(filters);
       query = filterSelectQuery(filters, query);
     }
 
     if(cursor !== undefined) {
       const messageCid = cursor;
-      query = query.where(({ eb, selectFrom, refTuple }) => {
+      query = query.where(({ eb, selectFrom }) => {
 
-        // fetches the cursor as a sort property tuple from the database based on the messageCid.
+        // fetch the watermark of the messageCid cursor
         const cursor = selectFrom('eventLog')
-          .select(['watermark', 'messageCid'])
+          .select('watermark')
           .where('tenant', '=', tenant)
           .where('messageCid', '=', messageCid)
-          .limit(1).$asTuple('watermark', 'messageCid');
+          .limit(1);
 
-        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple('watermark', 'messageCid'), '>' , cursor);
+        return eb('watermark', '>' , cursor);
       });
     }
-    query = query
-      .orderBy('watermark', 'asc');
+
+    query = query.orderBy('watermark', 'asc');
 
     const events: string[] = [];
     if (this.#dialect.isStreamingSupported) {
@@ -200,7 +169,7 @@ export class EventLogSql implements EventLog {
       .deleteFrom('eventLog')
       .where('tenant', '=', tenant)
       .where('messageCid', 'in', messageCids)
-      .executeTakeFirstOrThrow();
+      .execute();
   }
 
   async clear(): Promise<void> {

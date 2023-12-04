@@ -18,7 +18,7 @@ import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
-import { sanitizeRecords } from './utils/sanitize.js';
+import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 
 export class MessageStoreSql implements MessageStore {
@@ -87,7 +87,7 @@ export class MessageStoreSql implements MessageStore {
   async put(
     tenant: string,
     message: GenericMessage,
-    indexes: Record<string, string>,
+    indexes: Record<string, string | boolean | number>,
     options?: MessageStoreOptions
   ): Promise<void> {
     if (!this.#db) {
@@ -122,7 +122,7 @@ export class MessageStoreSql implements MessageStore {
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
-    sanitizeRecords(indexes);
+    sanitizeIndexes(indexes);
 
 
     await executeUnlessAborted(
@@ -135,7 +135,7 @@ export class MessageStoreSql implements MessageStore {
           encodedData,
           ...indexes
         })
-        .executeTakeFirstOrThrow(),
+        .execute(),
       options?.signal
     );
   }
@@ -190,10 +190,8 @@ export class MessageStoreSql implements MessageStore {
       .selectAll()
       .where('tenant', '=', tenant);
 
-    // if query is sorted by date published, only show records which are published
-    if(messageSort?.datePublished !== undefined) {
-      query = query.where('published', '=', 'true');
-    }
+    // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
+    sanitizeFilters(filters);
 
     // add filters to query
     query = filterSelectQuery(filters, query);
@@ -218,10 +216,11 @@ export class MessageStoreSql implements MessageStore {
       });
     }
 
+    const orderDirection = sortDirection === SortDirection.Ascending ? 'asc' : 'desc';
     // sorting by the provided sort property, the tiebreak is always in ascending order regardless of sort
     query =  query
-      .orderBy(sortProperty, sortDirection === SortDirection.Ascending ? 'asc' : 'desc')
-      .orderBy('messageCid', sortDirection === SortDirection.Ascending ? 'asc' : 'desc');
+      .orderBy(sortProperty, orderDirection)
+      .orderBy('messageCid', orderDirection);
 
     if (pagination?.limit !== undefined && pagination?.limit > 0) {
       // we query for one additional record to decide if we return a pagination cursor or not.
