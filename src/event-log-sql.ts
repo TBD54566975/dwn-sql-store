@@ -1,7 +1,13 @@
 import type { Database } from './database.js';
-import type { EventLog, Event, GetEventsOptions } from '@tbd54566975/dwn-sdk-js';
+import type { EventLog, GetEventsOptions, Filter } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Dialect } from './dialect/dialect.js';
+import { filterSelectQuery } from './utils/filter.js';
+
+type KeyValues = {
+  [key:string]: string | number | boolean
+};
+
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
@@ -21,10 +27,40 @@ export class EventLogSql implements EventLog {
       .createTable('eventLog')
       .ifNotExists()
       .addColumn('tenant', 'text', (col) => col.notNull())
-      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull());
+      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
+      // "indexes" start
+      .addColumn('interface', 'text')
+      .addColumn('method', 'text')
+      .addColumn('schema', 'text')
+      .addColumn('dataCid', 'text')
+      .addColumn('dataSize', 'integer')
+      .addColumn('dateCreated', 'text')
+      .addColumn('messageTimestamp', 'text')
+      .addColumn('dataFormat', 'text')
+      .addColumn('isLatestBaseState', 'text')
+      .addColumn('published', 'text')
+      .addColumn('author', 'text')
+      .addColumn('recordId', 'text')
+      .addColumn('entryId', 'text')
+      .addColumn('datePublished', 'text')
+      .addColumn('latest', 'text')
+      .addColumn('protocol', 'text')
+      .addColumn('dateExpires', 'text')
+      .addColumn('description', 'text')
+      .addColumn('grantedTo', 'text')
+      .addColumn('grantedBy', 'text')
+      .addColumn('grantedFor', 'text')
+      .addColumn('permissionsRequestId', 'text')
+      .addColumn('attester', 'text')
+      .addColumn('protocolPath', 'text')
+      .addColumn('recipient', 'text')
+      .addColumn('contextId', 'text')
+      .addColumn('parentId', 'text')
+      .addColumn('permissionsGrantId', 'text');
+      // "indexes" end
 
     // Add columns that have dialect-specific constraints
-    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
+    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
 
     await createTable.execute();
   }
@@ -34,28 +70,26 @@ export class EventLogSql implements EventLog {
     this.#db = null;
   }
 
-  async append(
-    tenant: string,
-    messageCid: string
-  ): Promise<string> {
+  async append(tenant: string, messageCid: string, indexes: KeyValues): Promise<void> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `append`.'
       );
     }
 
-    const result = await this.#db
+    await this.#db
       .insertInto('eventLog')
-      .values({ tenant, messageCid })
-      .executeTakeFirstOrThrow();
-
-    return result.insertId?.toString() ?? '';
+      .values({
+        tenant,
+        messageCid,
+        ...indexes
+      }).executeTakeFirstOrThrow();
   }
 
   async getEvents(
     tenant: string,
     options?: GetEventsOptions
-  ): Promise<Array<Event>> {
+  ): Promise<string[]> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `getEvents`.'
@@ -67,26 +101,81 @@ export class EventLogSql implements EventLog {
       .selectAll()
       .where('tenant', '=', tenant);
 
-    if (options && options.gt) {
-      query = query.where('id', '>', parseInt(options.gt));
+    if (options && options.cursor) {
+      const messageCid = options.cursor;
+      query = query.where(({ eb, selectFrom, refTuple }) => {
+
+        // fetches the cursor as a sort property tuple from the database based on the messageCid.
+        const cursor = selectFrom('eventLog')
+          .select(['watermark', 'messageCid'])
+          .where('tenant', '=', tenant)
+          .where('messageCid', '=', messageCid)
+          .limit(1).$asTuple('watermark', 'messageCid');
+
+        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
+        return eb(refTuple('watermark', 'messageCid'), '>' , cursor);
+      });
     }
 
-    const events: Event[] = [];
+    const events: string[] = [];
 
     if (this.#dialect.isStreamingSupported) {
-      for await (let result of query.stream()) {
-        events.push({
-          watermark  : result.id.toString(),
-          messageCid : result.messageCid
-        });
+      for await (let { messageCid } of query.stream()) {
+        events.push(messageCid);
       }
     } else {
       const results = await query.execute();
-      for (let result of results) {
-        events.push({
-          watermark  : result.id.toString(),
-          messageCid : result.messageCid
-        });
+      for (let { messageCid } of results) {
+        events.push(messageCid);
+      }
+    }
+
+    return events;
+  }
+
+  async queryEvents(tenant: string, filters: Filter[], cursor?: string): Promise<string[]> {
+    if (!this.#db) {
+      throw new Error(
+        'Connection to database not open. Call `open` before using `queryEvents`.'
+      );
+    }
+
+    let query = this.#db
+      .selectFrom('eventLog')
+      .select('messageCid')
+      .where('tenant', '=', tenant);
+
+    if (filters.length > 0) {
+      query = filterSelectQuery(filters, query);
+    }
+
+    if(cursor !== undefined) {
+      const messageCid = cursor;
+      query = query.where(({ eb, selectFrom, refTuple }) => {
+
+        // fetches the cursor as a sort property tuple from the database based on the messageCid.
+        const cursor = selectFrom('eventLog')
+          .select(['watermark', 'messageCid'])
+          .where('tenant', '=', tenant)
+          .where('messageCid', '=', messageCid)
+          .limit(1).$asTuple('watermark', 'messageCid');
+
+        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
+        return eb(refTuple('watermark', 'messageCid'), '>' , cursor);
+      });
+    }
+    query = query
+      .orderBy('watermark', 'asc');
+
+    const events: string[] = [];
+    if (this.#dialect.isStreamingSupported) {
+      for await (let { messageCid } of query.stream()) {
+        events.push(messageCid);
+      }
+    } else {
+      const results = await query.execute();
+      for (let { messageCid } of results) {
+        events.push(messageCid);
       }
     }
 
@@ -95,26 +184,23 @@ export class EventLogSql implements EventLog {
 
   async deleteEventsByCid(
     tenant: string,
-    cids: string[]
-  ): Promise<number> {
+    messageCids: Array<string>
+  ): Promise<void> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `deleteEventsByCid`.'
       );
     }
 
-    if (cids.length === 0) {
-      return 0;
+    if (messageCids.length === 0) {
+      return;
     }
 
-    const result = await this.#db
+    await this.#db
       .deleteFrom('eventLog')
       .where('tenant', '=', tenant)
-      .where('messageCid', 'in', cids)
+      .where('messageCid', 'in', messageCids)
       .executeTakeFirstOrThrow();
-
-    // TODO: numDeletedRows is a bigint. need to decide what to return here
-    return result.numDeletedRows as any;
   }
 
   async clear(): Promise<void> {

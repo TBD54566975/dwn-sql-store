@@ -9,7 +9,7 @@ import {
   MessageStoreOptions,
   MessageSort,
   Pagination,
-  SortOrder
+  SortDirection
 } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Database } from './database.js';
@@ -204,7 +204,7 @@ export class MessageStoreSql implements MessageStore {
     if(pagination?.cursor !== undefined) {
       const messageCid = pagination.cursor;
       query = query.where(({ eb, selectFrom, refTuple }) => {
-        const direction = sortDirection === SortOrder.Ascending ? '>' : '<';
+        const direction = sortDirection === SortDirection.Ascending ? '>' : '<';
 
         // fetches the cursor as a sort property tuple from the database based on the messageCid.
         const cursor = selectFrom('messageStore')
@@ -220,8 +220,8 @@ export class MessageStoreSql implements MessageStore {
 
     // sorting by the provided sort property, the tiebreak is always in ascending order regardless of sort
     query =  query
-      .orderBy(sortProperty, sortDirection === SortOrder.Ascending ? 'asc' : 'desc')
-      .orderBy('messageCid', 'asc');
+      .orderBy(sortProperty, sortDirection === SortDirection.Ascending ? 'asc' : 'desc')
+      .orderBy('messageCid', sortDirection === SortDirection.Ascending ? 'asc' : 'desc');
 
     if (pagination?.limit !== undefined && pagination?.limit > 0) {
       // we query for one additional record to decide if we return a pagination cursor or not.
@@ -324,7 +324,7 @@ export class MessageStoreSql implements MessageStore {
 
   private getOrderBy(
     messageSort?: MessageSort
-  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortOrder } {
+  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortDirection } {
     if(messageSort?.dateCreated !== undefined)  {
       return  { property: 'dateCreated', direction: messageSort.dateCreated };
     } else if(messageSort?.datePublished !== undefined) {
@@ -332,7 +332,7 @@ export class MessageStoreSql implements MessageStore {
     } else if (messageSort?.messageTimestamp !== undefined) {
       return  { property: 'messageTimestamp', direction: messageSort.messageTimestamp };
     } else {
-      return  { property: 'messageTimestamp', direction: SortOrder.Ascending };
+      return  { property: 'messageTimestamp', direction: SortDirection.Ascending };
     }
   }
 }
