@@ -9,7 +9,7 @@ import {
   MessageStoreOptions,
   MessageSort,
   Pagination,
-  SortOrder
+  SortDirection
 } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Database } from './database.js';
@@ -18,7 +18,7 @@ import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
-import { sanitizeRecords } from './utils/sanitize.js';
+import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 
 export class MessageStoreSql implements MessageStore {
@@ -87,7 +87,7 @@ export class MessageStoreSql implements MessageStore {
   async put(
     tenant: string,
     message: GenericMessage,
-    indexes: Record<string, string>,
+    indexes: Record<string, string | boolean | number>,
     options?: MessageStoreOptions
   ): Promise<void> {
     if (!this.#db) {
@@ -122,7 +122,7 @@ export class MessageStoreSql implements MessageStore {
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
-    sanitizeRecords(indexes);
+    sanitizeIndexes(indexes);
 
 
     await executeUnlessAborted(
@@ -135,7 +135,7 @@ export class MessageStoreSql implements MessageStore {
           encodedData,
           ...indexes
         })
-        .executeTakeFirstOrThrow(),
+        .execute(),
       options?.signal
     );
   }
@@ -190,10 +190,8 @@ export class MessageStoreSql implements MessageStore {
       .selectAll()
       .where('tenant', '=', tenant);
 
-    // if query is sorted by date published, only show records which are published
-    if(messageSort?.datePublished !== undefined) {
-      query = query.where('published', '=', 'true');
-    }
+    // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
+    sanitizeFilters(filters);
 
     // add filters to query
     query = filterSelectQuery(filters, query);
@@ -204,7 +202,7 @@ export class MessageStoreSql implements MessageStore {
     if(pagination?.cursor !== undefined) {
       const messageCid = pagination.cursor;
       query = query.where(({ eb, selectFrom, refTuple }) => {
-        const direction = sortDirection === SortOrder.Ascending ? '>' : '<';
+        const direction = sortDirection === SortDirection.Ascending ? '>' : '<';
 
         // fetches the cursor as a sort property tuple from the database based on the messageCid.
         const cursor = selectFrom('messageStore')
@@ -218,10 +216,11 @@ export class MessageStoreSql implements MessageStore {
       });
     }
 
+    const orderDirection = sortDirection === SortDirection.Ascending ? 'asc' : 'desc';
     // sorting by the provided sort property, the tiebreak is always in ascending order regardless of sort
     query =  query
-      .orderBy(sortProperty, sortDirection === SortOrder.Ascending ? 'asc' : 'desc')
-      .orderBy('messageCid', 'asc');
+      .orderBy(sortProperty, orderDirection)
+      .orderBy('messageCid', orderDirection);
 
     if (pagination?.limit !== undefined && pagination?.limit > 0) {
       // we query for one additional record to decide if we return a pagination cursor or not.
@@ -324,7 +323,7 @@ export class MessageStoreSql implements MessageStore {
 
   private getOrderBy(
     messageSort?: MessageSort
-  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortOrder } {
+  ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortDirection } {
     if(messageSort?.dateCreated !== undefined)  {
       return  { property: 'dateCreated', direction: messageSort.dateCreated };
     } else if(messageSort?.datePublished !== undefined) {
@@ -332,7 +331,7 @@ export class MessageStoreSql implements MessageStore {
     } else if (messageSort?.messageTimestamp !== undefined) {
       return  { property: 'messageTimestamp', direction: messageSort.messageTimestamp };
     } else {
-      return  { property: 'messageTimestamp', direction: SortOrder.Ascending };
+      return  { property: 'messageTimestamp', direction: SortDirection.Ascending };
     }
   }
 }
