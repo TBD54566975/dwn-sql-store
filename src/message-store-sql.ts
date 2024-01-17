@@ -202,7 +202,11 @@ export class MessageStoreSql implements MessageStore {
     if(pagination?.cursor !== undefined) {
       const cursorId = pagination.cursor.messageCid;
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
-      const cursorValue = pagination.cursor.value as string;
+      // if it is not of type string we return an empty result set
+      const cursorValue = pagination.cursor.value;
+      if (typeof cursorValue !== 'string') {
+        return { messages: [] };
+      }
 
       query = query.where(({ eb, refTuple, tuple }) => {
         const direction = sortDirection === SortDirection.Ascending ? '>' : '<';
