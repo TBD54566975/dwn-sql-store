@@ -57,7 +57,7 @@ export class EventLogSql implements EventLog {
       // "indexes" end
 
     // Add columns that have dialect-specific constraints
-    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
+    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
 
     await createTable.execute();
   }
@@ -111,7 +111,7 @@ export class EventLogSql implements EventLog {
 
     let query = this.#db
       .selectFrom('eventLog')
-      .select('id')
+      .select('watermark')
       .select('messageCid')
       .where('tenant', '=', tenant);
 
@@ -128,24 +128,24 @@ export class EventLogSql implements EventLog {
 
       query = query.where(({ eb, refTuple, tuple }) => {
         // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple('id', 'messageCid'), '>', tuple(cursorValue, cursorId));
+        return eb(refTuple('watermark', 'messageCid'), '>', tuple(cursorValue, cursorId));
       });
     }
 
-    query = query.orderBy('id', 'asc').orderBy('messageCid', 'asc');
+    query = query.orderBy('watermark', 'asc').orderBy('messageCid', 'asc');
 
     const events: string[] = [];
     let returnCursor: PaginationCursor | undefined;
     if (this.#dialect.isStreamingSupported) {
-      for await (let { messageCid, id } of query.stream()) {
+      for await (let { messageCid, watermark: value } of query.stream()) {
         events.push(messageCid);
-        returnCursor = { messageCid, value: id };
+        returnCursor = { messageCid, value };
       }
     } else {
       const results = await query.execute();
-      for (let { messageCid, id } of results) {
+      for (let { messageCid, watermark: value } of results) {
         events.push(messageCid);
-        returnCursor = { messageCid, value: id };
+        returnCursor = { messageCid, value };
       }
     }
 

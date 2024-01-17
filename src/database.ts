@@ -1,7 +1,7 @@
 import type { Generated } from 'kysely';
 
 export interface EventLogTable {
-  id: Generated<number>;
+  watermark: Generated<number>;
   tenant: string;
   messageCid: string;
 
