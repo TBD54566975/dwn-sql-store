@@ -201,7 +201,7 @@ export class MessageStoreSql implements MessageStore {
 
     if(pagination?.cursor !== undefined) {
       const cursorId = pagination.cursor.messageCid;
-      // we only allow sorting by string values currently in MessageSort (dates/timestamps)
+      // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
       const cursorValue = pagination.cursor.value as string;
 
       query = query.where(({ eb, refTuple, tuple }) => {
