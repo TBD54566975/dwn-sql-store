@@ -4,12 +4,12 @@ import {
   executeUnlessAborted,
   Filter,
   GenericMessage,
-  Message,
   MessageStore,
   MessageStoreOptions,
   MessageSort,
   Pagination,
-  SortDirection
+  SortDirection,
+  PaginationCursor
 } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Database } from './database.js';
@@ -176,7 +176,7 @@ export class MessageStoreSql implements MessageStore {
     messageSort?: MessageSort,
     pagination?: Pagination,
     options?: MessageStoreOptions
-  ): Promise<{ messages: GenericMessage[], cursor?: string }> {
+  ): Promise<{ messages: GenericMessage[], cursor?: PaginationCursor}> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `query`.'
@@ -200,19 +200,14 @@ export class MessageStoreSql implements MessageStore {
     const { property: sortProperty, direction: sortDirection } = this.getOrderBy(messageSort);
 
     if(pagination?.cursor !== undefined) {
-      const messageCid = pagination.cursor;
-      query = query.where(({ eb, selectFrom, refTuple }) => {
+      const cursorId = pagination.cursor.messageCid;
+      // we only allow sorting by string values currently in MessageSort (dates/timestamps)
+      const cursorValue = pagination.cursor.value as string;
+
+      query = query.where(({ eb, refTuple, tuple }) => {
         const direction = sortDirection === SortDirection.Ascending ? '>' : '<';
-
-        // fetches the cursor as a sort property tuple from the database based on the messageCid.
-        const cursor = selectFrom('messageStore')
-          .select([sortProperty, 'messageCid'])
-          .where('tenant', '=', tenant)
-          .where('messageCid', '=', messageCid)
-          .limit(1).$asTuple(sortProperty, 'messageCid');
-
         // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple(sortProperty, 'messageCid'), direction, cursor);
+        return eb(refTuple(sortProperty, 'messageCid'), direction, tuple(cursorValue, cursorId));
       });
     }
 
@@ -233,10 +228,9 @@ export class MessageStoreSql implements MessageStore {
     );
 
     // extracts the full encoded message from the stored blob for each result item.
-    const messages: Promise<GenericMessage>[] = results.map((r:any) => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
 
     // returns the pruned the messages, since we have and additional record from above, and a potential messageCid cursor
-    return this.getPaginationResults(messages,  pagination?.limit);
+    return this.getPaginationResults(results, sortProperty, pagination?.limit, options);
   }
 
   async delete(
@@ -307,18 +301,22 @@ export class MessageStoreSql implements MessageStore {
    * @returns the pruned message results and an optional messageCid cursor
    */
   private async getPaginationResults(
-    messages: Promise<GenericMessage>[], limit?: number
-  ): Promise<{ messages: GenericMessage[], cursor?: string }>{
-    if (limit !== undefined && messages.length > limit) {
-      messages = messages.slice(0, limit);
-      const lastMessage = messages.at(-1);
-      return {
-        messages : await Promise.all(messages),
-        cursor   : lastMessage ? await Message.getCid(await lastMessage) : undefined
-      };
+    results: any[],
+    sortProperty: string,
+    limit?: number,
+    options?: MessageStoreOptions,
+  ): Promise<{ messages: GenericMessage[], cursor?: PaginationCursor}> {
+    // we queried for one additional message to determine if there are any additional messages beyond the limit
+    let cursor: PaginationCursor | undefined;
+    if (limit !== undefined && results.length > limit) {
+      results = results.slice(0, limit);
+      const lastMessage = results.at(-1);
+      const cursorValue = lastMessage[sortProperty];
+      cursor = { messageCid: lastMessage.messageCid, value: cursorValue };
     }
 
-    return { messages: await Promise.all(messages) };
+    const messages: Promise<GenericMessage>[] = results.map(r => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
+    return { messages: await Promise.all(messages), cursor };
   }
 
   private getOrderBy(
