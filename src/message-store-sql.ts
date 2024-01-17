@@ -197,7 +197,7 @@ export class MessageStoreSql implements MessageStore {
     query = filterSelectQuery(filters, query);
 
     // extract sort property and direction from the supplied messageSort
-    const { property: sortProperty, direction: sortDirection } = this.getOrderBy(messageSort);
+    const { property: sortProperty, direction: sortDirection } = this.extractSortProperties(messageSort);
 
     if(pagination?.cursor !== undefined) {
       const cursorId = pagination.cursor.messageCid;
@@ -231,10 +231,9 @@ export class MessageStoreSql implements MessageStore {
       options?.signal
     );
 
-    // extracts the full encoded message from the stored blob for each result item.
-
-    // returns the pruned the messages, since we have and additional record from above, and a potential messageCid cursor
-    return this.getPaginationResults(results, sortProperty, pagination?.limit, options);
+    // prunes the additional requested message, if it exists, and adds a cursor to the results.
+    // also parses the encoded message for each of the returned results.
+    return this.processPaginationResults(results, sortProperty, pagination?.limit, options);
   }
 
   async delete(
@@ -296,15 +295,16 @@ export class MessageStoreSql implements MessageStore {
   }
 
   /**
-   * Gets the pagination Message Cid if there are additional messages to paginate.
+   * Processes the paginated query results.
+   * Builds a pagination cursor if there are additional messages to paginate.
    * Accepts more messages than the limit, as we query for additional records to check if we should paginate.
    *
    * @param messages a list of messages, potentially larger than the provided limit.
    * @param limit the maximum number of messages to be returned
    *
-   * @returns the pruned message results and an optional messageCid cursor
+   * @returns the pruned message results and an optional pagination cursor
    */
-  private async getPaginationResults(
+  private async processPaginationResults(
     results: any[],
     sortProperty: string,
     limit?: number,
@@ -319,11 +319,15 @@ export class MessageStoreSql implements MessageStore {
       cursor = { messageCid: lastMessage.messageCid, value: cursorValue };
     }
 
+    // parse each of of the results as an encoded dwn message.
     const messages: Promise<GenericMessage>[] = results.map(r => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
     return { messages: await Promise.all(messages), cursor };
   }
 
-  private getOrderBy(
+  /**
+   * Extracts the appropriate sort property and direction given a MessageSort object.
+   */
+  private extractSortProperties(
     messageSort?: MessageSort
   ):{ property: 'dateCreated' | 'datePublished' | 'messageTimestamp', direction: SortDirection } {
     if(messageSort?.dateCreated !== undefined)  {

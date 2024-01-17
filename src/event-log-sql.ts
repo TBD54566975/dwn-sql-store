@@ -120,6 +120,7 @@ export class EventLogSql implements EventLog {
       sanitizeFilters(filters);
       query = filterSelectQuery(filters, query);
     }
+
     if(cursor !== undefined) {
       const cursorId = cursor.messageCid;
 
@@ -139,6 +140,7 @@ export class EventLogSql implements EventLog {
     query = query.orderBy('watermark', 'asc').orderBy('messageCid', 'asc');
 
     const events: string[] = [];
+    // we always return a cursor with the event log query, so we set the return cursor to the properties of the last item.
     let returnCursor: PaginationCursor | undefined;
     if (this.#dialect.isStreamingSupported) {
       for await (let { messageCid, watermark: value } of query.stream()) {
