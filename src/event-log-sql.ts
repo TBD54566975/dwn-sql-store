@@ -122,18 +122,14 @@ export class EventLogSql implements EventLog {
     }
 
     if(cursor !== undefined) {
-      const cursorId = cursor.messageCid;
-
       // eventLog in the sql store uses the watermark cursor value which is a number in SQL
       // if not we will return empty results
-      const cursorValue = cursor.value;
-      if (typeof cursorValue  !== 'number') {
-        return { events: [] };
-      }
+      const cursorValue = cursor.value as number;
+      const cursorMessageCid = cursor.messageCid;
 
       query = query.where(({ eb, refTuple, tuple }) => {
         // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple('watermark', 'messageCid'), '>', tuple(cursorValue, cursorId));
+        return eb(refTuple('watermark', 'messageCid'), '>', tuple(cursorValue, cursorMessageCid));
       });
     }
 

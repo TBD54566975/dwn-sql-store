@@ -200,18 +200,15 @@ export class MessageStoreSql implements MessageStore {
     const { property: sortProperty, direction: sortDirection } = this.extractSortProperties(messageSort);
 
     if(pagination?.cursor !== undefined) {
-      const cursorId = pagination.cursor.messageCid;
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
       // if it is not of type string we return an empty result set
-      const cursorValue = pagination.cursor.value;
-      if (typeof cursorValue !== 'string') {
-        return { messages: [] };
-      }
+      const cursorValue = pagination.cursor.value as string;
+      const cursorMessageId = pagination.cursor.messageCid;
 
       query = query.where(({ eb, refTuple, tuple }) => {
         const direction = sortDirection === SortDirection.Ascending ? '>' : '<';
         // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
-        return eb(refTuple(sortProperty, 'messageCid'), direction, tuple(cursorValue, cursorId));
+        return eb(refTuple(sortProperty, 'messageCid'), direction, tuple(cursorValue, cursorMessageId));
       });
     }
 
