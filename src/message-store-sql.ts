@@ -308,6 +308,8 @@ export class MessageStoreSql implements MessageStore {
     options?: MessageStoreOptions,
   ): Promise<{ messages: GenericMessage[], cursor?: PaginationCursor}> {
     // we queried for one additional message to determine if there are any additional messages beyond the limit
+    // we now check if the returned results are greater than the limit, if so we pluck the last item out of the result set
+    // the cursor is always the last item in the *returned* result so we use the last item in the remaining result set to build a cursor
     let cursor: PaginationCursor | undefined;
     if (limit !== undefined && results.length > limit) {
       results = results.slice(0, limit);
@@ -316,7 +318,7 @@ export class MessageStoreSql implements MessageStore {
       cursor = { messageCid: lastMessage.messageCid, value: cursorValue };
     }
 
-    // parse each of of the results as an encoded dwn message.
+    // extracts the full encoded message from the stored blob for each result item.
     const messages: Promise<GenericMessage>[] = results.map(r => this.parseEncodedMessage(r.encodedMessageBytes, r.encodedData, options));
     return { messages: await Promise.all(messages), cursor };
   }
