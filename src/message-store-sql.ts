@@ -201,6 +201,7 @@ export class MessageStoreSql implements MessageStore {
 
     if(pagination?.cursor !== undefined) {
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
+      // TODO: https://github.com/TBD54566975/dwn-sdk-js/issues/664 to handle the edge case
       const cursorValue = pagination.cursor.value as string;
       const cursorMessageId = pagination.cursor.messageCid;
 
