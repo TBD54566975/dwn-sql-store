@@ -1,8 +1,9 @@
 import type { Database } from './database.js';
-import type { EventLog, GetEventsOptions, Filter } from '@tbd54566975/dwn-sdk-js';
-import { Kysely } from 'kysely';
+import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js';
+
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
+import { Kysely } from 'kysely';
 import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 export class EventLogSql implements EventLog {
@@ -90,18 +91,18 @@ export class EventLogSql implements EventLog {
 
   async getEvents(
     tenant: string,
-    options?: GetEventsOptions
-  ): Promise<string[]> {
+    cursor?: PaginationCursor
+  ): Promise<{events: string[], cursor?: PaginationCursor }> {
 
     // get events is simply a query without any filters. gets all events beyond the cursor.
-    return this.queryEvents(tenant, [], options?.cursor);
+    return this.queryEvents(tenant, [], cursor);
   }
 
   async queryEvents(
     tenant: string,
     filters: Filter[],
-    cursor?: string
-  ): Promise<string[]> {
+    cursor?: PaginationCursor
+  ): Promise<{events: string[], cursor?: PaginationCursor }> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `queryEvents`.'
@@ -110,6 +111,7 @@ export class EventLogSql implements EventLog {
 
     let query = this.#db
       .selectFrom('eventLog')
+      .select('watermark')
       .select('messageCid')
       .where('tenant', '=', tenant);
 
@@ -120,35 +122,36 @@ export class EventLogSql implements EventLog {
     }
 
     if(cursor !== undefined) {
-      const messageCid = cursor;
-      query = query.where(({ eb, selectFrom }) => {
+      // eventLog in the sql store uses the watermark cursor value which is a number in SQL
+      // if not we will return empty results
+      const cursorValue = cursor.value as number;
+      const cursorMessageCid = cursor.messageCid;
 
-        // fetch the watermark of the messageCid cursor
-        const cursor = selectFrom('eventLog')
-          .select('watermark')
-          .where('tenant', '=', tenant)
-          .where('messageCid', '=', messageCid)
-          .limit(1);
-
-        return eb('watermark', '>' , cursor);
+      query = query.where(({ eb, refTuple, tuple }) => {
+        // https://kysely-org.github.io/kysely-apidoc/interfaces/ExpressionBuilder.html#refTuple
+        return eb(refTuple('watermark', 'messageCid'), '>', tuple(cursorValue, cursorMessageCid));
       });
     }
 
-    query = query.orderBy('watermark', 'asc');
+    query = query.orderBy('watermark', 'asc').orderBy('messageCid', 'asc');
 
     const events: string[] = [];
+    // we always return a cursor with the event log query, so we set the return cursor to the properties of the last item.
+    let returnCursor: PaginationCursor | undefined;
     if (this.#dialect.isStreamingSupported) {
-      for await (let { messageCid } of query.stream()) {
+      for await (let { messageCid, watermark: value } of query.stream()) {
         events.push(messageCid);
+        returnCursor = { messageCid, value };
       }
     } else {
       const results = await query.execute();
-      for (let { messageCid } of results) {
+      for (let { messageCid, watermark: value } of results) {
         events.push(messageCid);
+        returnCursor = { messageCid, value };
       }
     }
 
-    return events;
+    return { events, cursor: returnCursor };
   }
 
   async deleteEventsByCid(
