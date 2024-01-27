@@ -7,6 +7,8 @@ import { EventLogSql } from '../src/event-log-sql.js';
 // Remove when we Node.js v18 is no longer supported by this project.
 // Node.js v18 maintenance begins 2023-10-18 and is EoL 2025-04-30: https://github.com/nodejs/release#release-schedule
 import { webcrypto } from 'node:crypto';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 describe('SQL Store Test Suite', () => {
