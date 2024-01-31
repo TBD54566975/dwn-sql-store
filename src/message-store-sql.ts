@@ -97,6 +97,7 @@ export class MessageStoreSql implements MessageStore {
     }
 
     options?.signal?.throwIfAborted();
+    const putIndexes = { ...indexes };
 
     // gets the encoded data and removes it from the message
     // we remove it from the message as it would cause the `encodedMessageBytes` to be greater than the
@@ -122,7 +123,7 @@ export class MessageStoreSql implements MessageStore {
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
-    sanitizeIndexes(indexes);
+    sanitizeIndexes(putIndexes);
 
 
     await executeUnlessAborted(
@@ -133,7 +134,7 @@ export class MessageStoreSql implements MessageStore {
           messageCid,
           encodedMessageBytes,
           encodedData,
-          ...indexes
+          ...putIndexes
         })
         .execute(),
       options?.signal

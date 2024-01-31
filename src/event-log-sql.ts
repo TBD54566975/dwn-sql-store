@@ -77,15 +77,16 @@ export class EventLogSql implements EventLog {
         'Connection to database not open. Call `open` before using `append`.'
       );
     }
+    const appendIndexes = { ...indexes };
 
-    sanitizeIndexes(indexes);
+    sanitizeIndexes(appendIndexes);
 
     await this.#db
       .insertInto('eventLog')
       .values({
         tenant,
         messageCid,
-        ...indexes
+        ...appendIndexes
       }).execute();
   }
 
