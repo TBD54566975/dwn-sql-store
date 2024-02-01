@@ -19,7 +19,7 @@ export class DataStoreSql implements DataStore {
 
     this.#db = new Kysely<Database>({ dialect: this.#dialect });
 
-    let createTable = this.#db.schema
+    let table = this.#db.schema
       .createTable('dataStore')
       .ifNotExists()
       .addColumn('tenant', 'text', (col) => col.notNull())
@@ -27,10 +27,16 @@ export class DataStoreSql implements DataStore {
       .addColumn('dataCid', 'varchar(60)', (col) => col.notNull());
 
     // Add columns that have dialect-specific constraints
-    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
-    createTable = this.#dialect.addBlobColumn(createTable, 'data', (col) => col.notNull());
+    table = this.#dialect.addAutoIncrementingColumn(table, 'id', (col) => col.primaryKey());
+    table = this.#dialect.addBlobColumn(table, 'data', (col) => col.notNull());
+    await table.execute();
 
-    await createTable.execute();
+    // Add index for efficient lookups.
+    this.#db.schema.createIndex('tenant_recordId_dataCid')
+      .on('dataStore')
+      .columns(['tenant', 'recordId', 'dataCid'])
+      .ifNotExists()
+      .execute();
   }
 
   async close(): Promise<void> {
