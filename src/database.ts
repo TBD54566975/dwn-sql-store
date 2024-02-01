@@ -78,20 +78,13 @@ export interface MessageStoreTable {
 export interface DataStoreTable {
   id: Generated<number>;
   tenant: string;
+  recordId: string;
   dataCid: string;
   data: Uint8Array;
-}
-
-export interface DataStoreReferencesTable {
-  id: Generated<number>;
-  tenant: string;
-  dataCid: string;
-  messageCid: string;
 }
 
 export interface Database {
   eventLog: EventLogTable;
   messageStore: MessageStoreTable;
   dataStore: DataStoreTable;
-  dataStoreReferences: DataStoreReferencesTable;
 }
