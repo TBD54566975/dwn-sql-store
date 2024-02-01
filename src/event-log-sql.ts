@@ -1,4 +1,4 @@
-import type { Database } from './database.js';
+import type { DwnDatabaseType } from './types.js';
 import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js';
 
 import { Dialect } from './dialect/dialect.js';
@@ -8,7 +8,7 @@ import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
-  #db: Kysely<Database> | null = null;
+  #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
@@ -19,7 +19,7 @@ export class EventLogSql implements EventLog {
       return;
     }
 
-    this.#db = new Kysely<Database>({ dialect: this.#dialect });
+    this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
     let createTable = this.#db.schema
       .createTable('eventLog')
       .ifNotExists()

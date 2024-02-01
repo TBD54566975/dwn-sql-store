@@ -1,12 +1,12 @@
 import { DataStore, DataStream, DataStoreGetResult, DataStorePutResult } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Readable } from 'readable-stream';
-import { Database } from './database.js';
+import { DwnDatabaseType } from './types.js';
 import { Dialect } from './dialect/dialect.js';
 
 export class DataStoreSql implements DataStore {
   #dialect: Dialect;
-  #db: Kysely<Database> | null = null;
+  #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
@@ -17,12 +17,12 @@ export class DataStoreSql implements DataStore {
       return;
     }
 
-    this.#db = new Kysely<Database>({ dialect: this.#dialect });
+    this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
 
     let table = this.#db.schema
       .createTable('dataStore')
       .ifNotExists()
-      .addColumn('tenant', 'text', (col) => col.notNull())
+      .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('recordId', 'varchar(60)', (col) => col.notNull())
       .addColumn('dataCid', 'varchar(60)', (col) => col.notNull());
 
@@ -32,10 +32,11 @@ export class DataStoreSql implements DataStore {
     await table.execute();
 
     // Add index for efficient lookups.
-    this.#db.schema.createIndex('tenant_recordId_dataCid')
+    this.#db.schema
+      .createIndex('tenant_recordId_dataCid')
+      .ifNotExists()
       .on('dataStore')
       .columns(['tenant', 'recordId', 'dataCid'])
-      .ifNotExists()
       .unique()
       .execute();
   }
