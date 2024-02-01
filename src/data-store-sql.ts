@@ -36,6 +36,7 @@ export class DataStoreSql implements DataStore {
       .on('dataStore')
       .columns(['tenant', 'recordId', 'dataCid'])
       .ifNotExists()
+      .unique()
       .execute();
   }
 
