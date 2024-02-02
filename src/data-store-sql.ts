@@ -1,13 +1,12 @@
-import { AssociateResult, DataStore, DataStream, GetResult, PutResult } from '@tbd54566975/dwn-sdk-js';
+import { DataStore, DataStream, DataStoreGetResult, DataStorePutResult } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
 import { Readable } from 'readable-stream';
-import { Database } from './database.js';
-import { Cid } from '@tbd54566975/dwn-sdk-js';
+import { DwnDatabaseType } from './types.js';
 import { Dialect } from './dialect/dialect.js';
 
 export class DataStoreSql implements DataStore {
   #dialect: Dialect;
-  #db: Kysely<Database> | null = null;
+  #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
@@ -18,28 +17,28 @@ export class DataStoreSql implements DataStore {
       return;
     }
 
-    this.#db = new Kysely<Database>({ dialect: this.#dialect });
+    this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
 
-    let createTable = this.#db.schema
+    let table = this.#db.schema
       .createTable('dataStore')
       .ifNotExists()
-      .addColumn('tenant', 'text', (col) => col.notNull())
+      .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
+      .addColumn('recordId', 'varchar(60)', (col) => col.notNull())
       .addColumn('dataCid', 'varchar(60)', (col) => col.notNull());
 
-    let createReferenceTable = this.#db.schema
-      .createTable('dataStoreReferences')
-      .ifNotExists()
-      .addColumn('tenant', 'text', (col) => col.notNull())
-      .addColumn('dataCid', 'varchar(60)', (col) => col.notNull())
-      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull());
-
     // Add columns that have dialect-specific constraints
-    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
-    createTable = this.#dialect.addBlobColumn(createTable, 'data', (col) => col.notNull());
-    createReferenceTable = this.#dialect.addAutoIncrementingColumn(createReferenceTable, 'id', (col) => col.primaryKey());
+    table = this.#dialect.addAutoIncrementingColumn(table, 'id', (col) => col.primaryKey());
+    table = this.#dialect.addBlobColumn(table, 'data', (col) => col.notNull());
+    await table.execute();
 
-    await createTable.execute();
-    await createReferenceTable.execute();
+    // Add index for efficient lookups.
+    this.#db.schema
+      .createIndex('tenant_recordId_dataCid')
+      .ifNotExists()
+      .on('dataStore')
+      .columns(['tenant', 'recordId', 'dataCid'])
+      .unique()
+      .execute();
   }
 
   async close(): Promise<void> {
@@ -49,32 +48,20 @@ export class DataStoreSql implements DataStore {
 
   async get(
     tenant: string,
-    messageCid: string,
+    recordId: string,
     dataCid: string
-  ): Promise<GetResult | undefined> {
+  ): Promise<DataStoreGetResult | undefined> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `get`.'
       );
     }
 
-    const hasReferenceToData = await this.#db
-      .selectFrom('dataStoreReferences')
-      .selectAll()
-      .where('tenant', '=', tenant)
-      .where('messageCid', '=', messageCid)
-      .where('dataCid', '=', dataCid)
-      .executeTakeFirst()
-      .then((result) => result !== undefined);
-
-    if (!hasReferenceToData) {
-      return undefined;
-    }
-
     const result = await this.#db
       .selectFrom('dataStore')
       .selectAll()
       .where('tenant', '=', tenant)
+      .where('recordId', '=', recordId)
       .where('dataCid', '=', dataCid)
       .executeTakeFirst();
 
@@ -83,7 +70,6 @@ export class DataStoreSql implements DataStore {
     }
 
     return {
-      dataCid    : result.dataCid,
       dataSize   : result.data.length,
       dataStream : new Readable({
         read() {
@@ -96,10 +82,10 @@ export class DataStoreSql implements DataStore {
 
   async put(
     tenant: string,
-    messageCid: string,
+    recordId: string,
     dataCid: string,
     dataStream: Readable
-  ): Promise<PutResult> {
+  ): Promise<DataStorePutResult> {
     if (!this.#db) {
       throw new Error(
         'Connection to database not open. Call `open` before using `put`.'
@@ -111,68 +97,17 @@ export class DataStoreSql implements DataStore {
 
     await this.#db
       .insertInto('dataStore')
-      .values({ tenant, dataCid, data })
-      .executeTakeFirstOrThrow();
-
-    await this.#db
-      .insertInto('dataStoreReferences')
-      .values({ tenant, messageCid, dataCid })
+      .values({ tenant, recordId, dataCid, data })
       .executeTakeFirstOrThrow();
 
     return {
-      dataCid  : await Cid.computeDagPbCidFromBytes(bytes),
-      dataSize : bytes.length
-    };
-  }
-
-  async associate(
-    tenant: string,
-    messageCid: string,
-    dataCid: string
-  ): Promise<AssociateResult | undefined> {
-    if (!this.#db) {
-      throw new Error(
-        'Connection to database not open. Call `open` before using `associate`.'
-      );
-    }
-
-    const dataRecord = await this.#db
-      .selectFrom('dataStore')
-      .selectAll()
-      .where('tenant', '=', tenant)
-      .where('dataCid', '=', dataCid)
-      .executeTakeFirst();
-
-    if (!dataRecord) {
-      return undefined;
-    }
-
-    const hasExistingReference = await this.#db
-      .selectFrom('dataStoreReferences')
-      .selectAll()
-      .where('tenant', '=', tenant)
-      .where('messageCid', '=', messageCid)
-      .where('dataCid', '=', dataCid)
-      .execute()
-      .then((results) => results.length !== 0);
-
-    if (!hasExistingReference) {
-      // This message doesn't have a reference to the data. Make one!
-      await this.#db
-        .insertInto('dataStoreReferences')
-        .values({ tenant, messageCid, dataCid })
-        .executeTakeFirstOrThrow();
-    }
-
-    return {
-      dataCid  : dataCid,
-      dataSize : dataRecord.data.length
+      dataSize: bytes.length
     };
   }
 
   async delete(
     tenant: string,
-    messageCid: string,
+    recordId: string,
     dataCid: string
   ): Promise<void> {
     if (!this.#db) {
@@ -181,30 +116,12 @@ export class DataStoreSql implements DataStore {
       );
     }
 
-    // Delete the message's reference to the data
     await this.#db
-      .deleteFrom('dataStoreReferences')
+      .deleteFrom('dataStore')
       .where('tenant', '=', tenant)
-      .where('messageCid', '=', messageCid)
+      .where('recordId', '=', recordId)
       .where('dataCid', '=', dataCid)
       .execute();
-
-    const wasLastReferenceToData = await this.#db
-      .selectFrom('dataStoreReferences')
-      .selectAll()
-      .where('tenant', '=', tenant)
-      .where('dataCid', '=', dataCid)
-      .execute()
-      .then((results) => results.length === 0);
-
-    if (wasLastReferenceToData) {
-      // Delete the data from the dataStore, no other messages reference it
-      await this.#db
-        .deleteFrom('dataStore')
-        .where('tenant', '=', tenant)
-        .where('dataCid', '=', dataCid)
-        .execute();
-    }
   }
 
   async clear(): Promise<void> {
@@ -216,10 +133,6 @@ export class DataStoreSql implements DataStore {
 
     await this.#db
       .deleteFrom('dataStore')
-      .execute();
-
-    await this.#db
-      .deleteFrom('dataStoreReferences')
       .execute();
   }
 

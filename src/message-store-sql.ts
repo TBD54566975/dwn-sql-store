@@ -12,7 +12,7 @@ import {
   PaginationCursor
 } from '@tbd54566975/dwn-sdk-js';
 import { Kysely } from 'kysely';
-import { Database } from './database.js';
+import { DwnDatabaseType } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
@@ -23,7 +23,7 @@ import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
 
 export class MessageStoreSql implements MessageStore {
   #dialect: Dialect;
-  #db: Kysely<Database> | null = null;
+  #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
@@ -34,7 +34,7 @@ export class MessageStoreSql implements MessageStore {
       return;
     }
 
-    this.#db = new Kysely<Database>({ dialect: this.#dialect });
+    this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
     let createTable = this.#db.schema
       .createTable('messageStore')
       .ifNotExists()

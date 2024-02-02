@@ -1,6 +1,6 @@
 import type { Generated } from 'kysely';
 
-export interface EventLogTable {
+type EventLogTable = {
   watermark: Generated<number>;
   tenant: string;
   messageCid: string;
@@ -37,7 +37,7 @@ export interface EventLogTable {
   // "indexes" end
 }
 
-export interface MessageStoreTable {
+type MessageStoreTable = {
   id: Generated<number>;
   tenant: string;
   messageCid: string;
@@ -75,23 +75,16 @@ export interface MessageStoreTable {
   // "indexes" end
 }
 
-export interface DataStoreTable {
+type DataStoreTable = {
   id: Generated<number>;
   tenant: string;
+  recordId: string;
   dataCid: string;
   data: Uint8Array;
 }
 
-export interface DataStoreReferencesTable {
-  id: Generated<number>;
-  tenant: string;
-  dataCid: string;
-  messageCid: string;
-}
-
-export interface Database {
+export type DwnDatabaseType = {
   eventLog: EventLogTable;
   messageStore: MessageStoreTable;
   dataStore: DataStoreTable;
-  dataStoreReferences: DataStoreReferencesTable;
 }
