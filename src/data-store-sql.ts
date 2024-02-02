@@ -116,7 +116,6 @@ export class DataStoreSql implements DataStore {
       );
     }
 
-    // Delete the data from the dataStore, no other messages reference it
     await this.#db
       .deleteFrom('dataStore')
       .where('tenant', '=', tenant)
