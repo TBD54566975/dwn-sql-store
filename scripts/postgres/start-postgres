@@ -17,6 +17,7 @@ else
     --env POSTGRES_DB=$DB_NAME \
     --env POSTGRES_USER=$DB_USER \
     --env POSTGRES_PASSWORD=$DB_PASSWORD \
+    --env POSTGRES_INITDB_ARGS='--lc-collate=C --lc-ctype=C' \
     --publish $DB_PORT:$DB_PORT \
     postgres:13.3
 fi
