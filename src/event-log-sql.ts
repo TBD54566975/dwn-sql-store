@@ -2,9 +2,9 @@ import type { DwnDatabaseType } from './types.js';
 import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js';
 
 import { Dialect } from './dialect/dialect.js';
-import { filterSelectQuery } from './utils/filter.js';
+import { filterSelectQueryWithTags } from './utils/filter.js';
 import { Kysely } from 'kysely';
-import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
+import { extractTagsAndSanitizeFilters, extractTagsAndSanitizeIndexes, sanitizeIndexes } from './utils/sanitize.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
@@ -57,10 +57,26 @@ export class EventLogSql implements EventLog {
       .addColumn('permissionsGrantId', 'text');
       // "indexes" end
 
+    let createRecordsTagsTable = this.#db.schema
+      .createTable('eventLogRecordsTags')
+      .ifNotExists()
+      .addColumn('eventLogWatermark', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLog', 'watermark'))
+      .addColumn('tag', 'text', (col) => col.notNull());
+
+    let createRecordsTagValuesTable = this.#db.schema
+      .createTable('eventLogRecordsTagValues')
+      .ifNotExists()
+      .addColumn('tag_id', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLogRecordsTags', 'id'))
+      .addColumn('valueString', 'text')
+      .addColumn('valueNumber', 'integer');
+
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
+    createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
 
     await createTable.execute();
+    await createRecordsTagsTable.execute();
+    await createRecordsTagValuesTable.execute();
   }
 
   async close(): Promise<void> {
@@ -78,17 +94,78 @@ export class EventLogSql implements EventLog {
         'Connection to database not open. Call `open` before using `append`.'
       );
     }
-    const appendIndexes = { ...indexes };
+    const { indexes:appendIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
     sanitizeIndexes(appendIndexes);
 
-    await this.#db
+    const result = await this.#db
       .insertInto('eventLog')
       .values({
         tenant,
         messageCid,
         ...appendIndexes
       }).execute();
+    if (result[0] && result[0].insertId && Object.keys(tags).length > 0) {
+      const eventLogWatermark = Number(result[0].insertId);
+      for (const tag in tags) {
+        const tagValue = tags[tag];
+
+        const tagResult = await this.#db
+          .insertInto('eventLogRecordsTags')
+          .values({
+            eventLogWatermark,
+            tag: tag,
+          }).execute();
+        if (tagResult.length !== 1) {
+          //TODO: rollback transaction
+          throw new Error('invalid issue');
+        }
+
+        const tagId = Number(tagResult[0].insertId);
+        if (Array.isArray(tagValue)) {
+          for (const value of tagValue) {
+            if (typeof value === 'string') {
+              await this.#db
+                .insertInto('eventLogRecordsTagValues')
+                .values({
+                  tag_id      : tagId,
+                  valueString : value,
+                }).execute();
+            } else {
+              await this.#db
+                .insertInto('eventLogRecordsTagValues')
+                .values({
+                  tag_id      : tagId,
+                  valueNumber : value,
+                }).execute();
+            }
+          }
+        } else {
+          if (typeof tagValue === 'string') {
+            await this.#db
+              .insertInto('eventLogRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueString : tagValue,
+              }).execute();
+          } else if (typeof tagValue === 'number') {
+            await this.#db
+              .insertInto('eventLogRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueNumber : tagValue,
+              }).execute();
+          } else {
+            await this.#db
+              .insertInto('eventLogRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueString : String(tagValue),
+              }).execute();
+          }
+        }
+      }
+    }
   }
 
   async getEvents(
@@ -113,14 +190,17 @@ export class EventLogSql implements EventLog {
 
     let query = this.#db
       .selectFrom('eventLog')
-      .select('watermark')
+      .leftJoin('eventLogRecordsTags', 'eventLogRecordsTags.eventLogWatermark', 'eventLog.watermark')
+      .leftJoin('eventLogRecordsTagValues', 'eventLogRecordsTagValues.tag_id', 'eventLogRecordsTags.id')
       .select('messageCid')
+      .distinct()
+      .select('watermark')
       .where('tenant', '=', tenant);
 
-    if (filters.length > 0) {
-      // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
-      sanitizeFilters(filters);
-      query = filterSelectQuery(filters, query);
+    const extractedFilters = extractTagsAndSanitizeFilters(filters);
+
+    if (extractedFilters.length > 0) {
+      query = filterSelectQueryWithTags('eventLog', 'eventLogRecordsTags', extractedFilters, query);
     }
 
     if(cursor !== undefined) {
