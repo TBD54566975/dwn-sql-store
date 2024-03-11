@@ -1,8 +1,38 @@
 import { Filter } from '@tbd54566975/dwn-sdk-js';
+import { KeyValues } from '../types.js';
 
-export function sanitizeIndexes(records: Record<string, string | number | boolean>) {
+export function extractTagsAndSanitizeIndexes(records: KeyValues): {
+  tags: KeyValues;
+  indexes: KeyValues;
+} {
+
+  const tags = {};
+  const indexes = { ...records };
+
+  sanitizeIndexes(indexes);
+  for (let key in indexes) {
+    if (key.startsWith('tag.')) {
+      let value = indexes[key];
+      delete indexes[key];
+      tags[key.slice(4)] = value;
+    }
+  }
+
+  return { tags, indexes };
+}
+
+export function sanitizeIndexes(records: KeyValues) {
   for (let key in records) {
     let value = records[key];
+    if (Array.isArray(value)) {
+      const sanitizedValues: any[] = [];
+      for (const valueItem of value) {
+        sanitizedValues.push(sanitizedValue(valueItem));
+      }
+      records[key] = sanitizedValues;
+      continue;
+    }
+
     records[key] = sanitizedValue(value);
   }
 }
@@ -18,6 +48,36 @@ export function sanitizedValue(value: string | number | boolean): string | numbe
   }
 }
 
+export function extractTagsAndSanitizeFilters(filters: Filter[]): {
+  tag: Filter;
+  filter: Filter;
+}[] {
+
+  const extractedFilters: { tag:Filter, filter: Filter }[] = [];
+
+  for (const filter of filters) {
+    const tagFilter = {};
+    const filterCopy = { ...filter };
+
+    for (let key in filterCopy) {
+      if (key.startsWith('tag.')) {
+        let value = filterCopy[key];
+        delete filterCopy[key];
+        tagFilter[key.slice(4)] = sanitizeFilterValue(value);
+      } else {
+        const value = filterCopy[key];
+        filterCopy[key] = sanitizeFilterValue(value);
+      }
+    }
+    extractedFilters.push({
+      tag    : tagFilter,
+      filter : filterCopy,
+    });
+  }
+
+  return extractedFilters;
+}
+
 // we sanitize the filter value for a string representation of the boolean
 // TODO: export filter types from `dwn-sdk-js`
 export function sanitizeFilterValue(value: any): any {
@@ -30,10 +90,7 @@ export function sanitizeFilterValue(value: any): any {
 }
 
 export function sanitizeFilters(filters: Filter[]) {
-  for (let key in filters) {
-    let filter = filters[key];
-    filters[key] = sanitizeFilter(filter);
-  }
+  filters.forEach(sanitizeFilter);
 }
 
 export function sanitizeFilter(filter: Filter): Filter {

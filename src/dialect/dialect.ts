@@ -1,5 +1,6 @@
 import {
   ColumnBuilderCallback,
+  ColumnDefinitionBuilder,
   CreateTableBuilder,
   Dialect as KyselyDialect
 } from 'kysely';
@@ -18,5 +19,12 @@ export interface Dialect extends KyselyDialect {
     columnName: string,
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB>;
+
+  addReferencedColumn(
+    builder: ColumnDefinitionBuilder,
+    referenceTable: string,
+    referenceColumnName: string,
+    onDeleteAction?: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
+  ): ColumnDefinitionBuilder;
 
 }

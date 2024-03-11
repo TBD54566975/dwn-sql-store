@@ -9,16 +9,17 @@ import {
   MessageSort,
   Pagination,
   SortDirection,
-  PaginationCursor
+  PaginationCursor,
 } from '@tbd54566975/dwn-sdk-js';
+
 import { Kysely } from 'kysely';
-import { DwnDatabaseType } from './types.js';
+import { DwnDatabaseType, KeyValues } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
-import { filterSelectQuery } from './utils/filter.js';
-import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
+import { filterSelectQueryWithTags } from './utils/filter.js';
+import { extractTagsAndSanitizeFilters, extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
 
 
 export class MessageStoreSql implements MessageStore {
@@ -38,7 +39,7 @@ export class MessageStoreSql implements MessageStore {
     let createTable = this.#db.schema
       .createTable('messageStore')
       .ifNotExists()
-      .addColumn('tenant', 'text', (col) => col.notNull())
+      .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
       .addColumn('encodedData', 'text') // we optionally store encoded data if it is below a threshold
       // "indexes" start
@@ -54,7 +55,7 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('isLatestBaseState', 'text')
       .addColumn('published', 'text')
       .addColumn('author', 'text')
-      .addColumn('recordId', 'text')
+      .addColumn('recordId', 'varchar(60)')
       .addColumn('entryId', 'text')
       .addColumn('datePublished', 'text')
       .addColumn('latest', 'text')
@@ -73,11 +74,27 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('permissionsGrantId', 'text');
       // "indexes" end
 
+    let createRecordsTagsTable = this.#db.schema
+      .createTable('messageStoreRecordsTags')
+      .ifNotExists()
+      .addColumn('messageStoreId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStore', 'id'))
+      .addColumn('tag', 'text', (col) => col.notNull());
+
+    let createRecordsTagValuesTable = this.#db.schema
+      .createTable('messageStoreRecordsTagValues')
+      .ifNotExists()
+      .addColumn('tag_id', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStoreRecordsTags', 'id'))
+      .addColumn('valueString', 'text')
+      .addColumn('valueNumber', 'integer');
+
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
+    createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
 
     await createTable.execute();
+    await createRecordsTagsTable.execute();
+    await createRecordsTagValuesTable.execute();
   }
 
   async close(): Promise<void> {
@@ -88,7 +105,7 @@ export class MessageStoreSql implements MessageStore {
   async put(
     tenant: string,
     message: GenericMessage,
-    indexes: Record<string, string | boolean | number>,
+    indexes: KeyValues,
     options?: MessageStoreOptions
   ): Promise<void> {
     if (!this.#db) {
@@ -98,7 +115,6 @@ export class MessageStoreSql implements MessageStore {
     }
 
     options?.signal?.throwIfAborted();
-    const putIndexes = { ...indexes };
 
     // gets the encoded data and removes it from the message
     // we remove it from the message as it would cause the `encodedMessageBytes` to be greater than the
@@ -124,22 +140,81 @@ export class MessageStoreSql implements MessageStore {
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
-    sanitizeIndexes(putIndexes);
 
+    const { indexes:putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
+    const db = this.#db;
+    const result = await db
+      .insertInto('messageStore')
+      .values({
+        tenant,
+        messageCid,
+        encodedMessageBytes,
+        encodedData,
+        ...putIndexes
+      })
+      .execute();
 
-    await executeUnlessAborted(
-      this.#db
-        .insertInto('messageStore')
-        .values({
-          tenant,
-          messageCid,
-          encodedMessageBytes,
-          encodedData,
-          ...putIndexes
-        })
-        .execute(),
-      options?.signal
-    );
+    if (result[0] && result[0].insertId && Object.keys(tags).length > 0) {
+      const messageStoreId = Number(result[0].insertId);
+      for (const tag in tags) {
+        const tagValue = tags[tag];
+
+        const tagResult = await db
+          .insertInto('messageStoreRecordsTags')
+          .values({
+            messageStoreId,
+            tag: tag,
+          }).execute();
+        if (tagResult.length !== 1) {
+          //TODO: rollback transaction
+          throw new Error('invalid issue');
+        }
+
+        const tagId = Number(tagResult[0].insertId);
+        if (Array.isArray(tagValue)) {
+          for (const value of tagValue) {
+            if (typeof value === 'string') {
+              await db
+                .insertInto('messageStoreRecordsTagValues')
+                .values({
+                  tag_id      : tagId,
+                  valueString : value,
+                }).execute();
+            } else {
+              await db
+                .insertInto('messageStoreRecordsTagValues')
+                .values({
+                  tag_id      : tagId,
+                  valueNumber : value,
+                }).execute();
+            }
+          }
+        } else {
+          if (typeof tagValue === 'string') {
+            await db
+              .insertInto('messageStoreRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueString : tagValue,
+              }).execute();
+          } else if (typeof tagValue === 'number') {
+            await db
+              .insertInto('messageStoreRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueNumber : tagValue,
+              }).execute();
+          } else {
+            await db
+              .insertInto('messageStoreRecordsTagValues')
+              .values({
+                tag_id      : tagId,
+                valueString : String(tagValue),
+              }).execute();
+          }
+        }
+      }
+    }
   }
 
   async get(
@@ -187,19 +262,27 @@ export class MessageStoreSql implements MessageStore {
 
     options?.signal?.throwIfAborted();
 
-    let query = this.#db
-      .selectFrom('messageStore')
-      .selectAll()
-      .where('tenant', '=', tenant);
-
-    // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
-    sanitizeFilters(filters);
-
-    // add filters to query
-    query = filterSelectQuery(filters, query);
-
     // extract sort property and direction from the supplied messageSort
     const { property: sortProperty, direction: sortDirection } = this.extractSortProperties(messageSort);
+
+    let query = this.#db
+      .selectFrom('messageStore')
+      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageStoreId', 'messageStore.id')
+      .leftJoin('messageStoreRecordsTagValues', 'messageStoreRecordsTagValues.tag_id', 'messageStoreRecordsTags.id')
+      .select('messageCid')
+      .distinct()
+      .select([
+        'encodedMessageBytes',
+        'encodedData',
+        sortProperty,
+      ])
+      .where('tenant', '=', tenant);
+
+    const extractedFilters = extractTagsAndSanitizeFilters(filters);
+
+    // add filters to query
+    // query = filterSelectQuery(filters, query);
+    query = filterSelectQueryWithTags('messageStore', 'messageStoreRecordsTags', extractedFilters, query);
 
     if(pagination?.cursor !== undefined) {
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings

@@ -2,7 +2,8 @@ import { Dialect } from './dialect.js';
 import {
   CreateTableBuilder,
   ColumnBuilderCallback,
-  MysqlDialect as KyselyMysqlDialect
+  MysqlDialect as KyselyMysqlDialect,
+  ColumnDefinitionBuilder
 } from 'kysely';
 
 export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
@@ -28,5 +29,14 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB> {
     return builder.addColumn(columnName, 'blob', callback);
+  }
+
+  addReferencedColumn(
+    builder: ColumnDefinitionBuilder,
+    referenceTable: string,
+    referenceColumnName: string,
+    onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default' = 'cascade',
+  ): ColumnDefinitionBuilder {
+    return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
   }
 }
