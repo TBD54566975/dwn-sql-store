@@ -2,7 +2,8 @@ import { Dialect } from './dialect.js';
 import {
   CreateTableBuilder,
   ColumnBuilderCallback,
-  PostgresDialect as KyselyPostgresDialect
+  PostgresDialect as KyselyPostgresDialect,
+  ColumnDefinitionBuilder
 } from 'kysely';
 
 export class PostgresDialect extends KyselyPostgresDialect implements Dialect {
@@ -22,5 +23,14 @@ export class PostgresDialect extends KyselyPostgresDialect implements Dialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB> {
     return builder.addColumn(columnName, 'bytea', callback);
+  }
+
+  addReferencedColumn(
+    builder: ColumnDefinitionBuilder,
+    referenceTable: string,
+    referenceColumnName: string,
+    onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default' = 'cascade',
+  ): ColumnDefinitionBuilder {
+    return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
   }
 }

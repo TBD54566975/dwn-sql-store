@@ -1,6 +1,7 @@
 import { Dialect } from './dialect.js';
 import {
   ColumnBuilderCallback,
+  ColumnDefinitionBuilder,
   CreateTableBuilder,
   SqliteDialect as KyselySqliteDialect,
 } from 'kysely';
@@ -28,5 +29,14 @@ export class SqliteDialect extends KyselySqliteDialect implements Dialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB> {
     return builder.addColumn(columnName, 'blob', callback);
+  }
+
+  addReferencedColumn(
+    builder: ColumnDefinitionBuilder,
+    referenceTable: string,
+    referenceColumnName: string,
+    onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default' = 'cascade',
+  ): ColumnDefinitionBuilder {
+    return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
   }
 }
