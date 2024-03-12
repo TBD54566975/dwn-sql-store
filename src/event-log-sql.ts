@@ -1,10 +1,11 @@
-import type { DwnDatabaseType } from './types.js';
+import type { DwnDatabaseType, KeyValues } from './types.js';
 import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js';
 
 import { Dialect } from './dialect/dialect.js';
-import { filterSelectQueryWithTags } from './utils/filter.js';
-import { Kysely } from 'kysely';
-import { extractTagsAndSanitizeFilters, extractTagsAndSanitizeIndexes, sanitizeIndexes } from './utils/sanitize.js';
+import { filterSelectQuery } from './utils/filter.js';
+import { InsertResult, Kysely, Transaction } from 'kysely';
+import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
+import { executeTagsInsert } from './utils/tags.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
@@ -66,7 +67,7 @@ export class EventLogSql implements EventLog {
     let createRecordsTagValuesTable = this.#db.schema
       .createTable('eventLogRecordsTagValues')
       .ifNotExists()
-      .addColumn('tag_id', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLogRecordsTags', 'id'))
+      .addColumn('tagId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLogRecordsTags', 'id'))
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
 
@@ -94,78 +95,39 @@ export class EventLogSql implements EventLog {
         'Connection to database not open. Call `open` before using `append`.'
       );
     }
-    const { indexes:appendIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
-    sanitizeIndexes(appendIndexes);
+    await this.#db.transaction().execute(this.executePutTransaction({
+      tenant, messageCid, indexes
+    }));
+  }
 
-    const result = await this.#db
-      .insertInto('eventLog')
-      .values({
-        tenant,
-        messageCid,
-        ...appendIndexes
-      }).execute();
-    if (result[0] && result[0].insertId && Object.keys(tags).length > 0) {
-      const eventLogWatermark = Number(result[0].insertId);
-      for (const tag in tags) {
-        const tagValue = tags[tag];
+  private executePutTransaction(queryOptions: {
+    tenant: string;
+    messageCid: string;
+    indexes: KeyValues;
+  }): (tx: Transaction<DwnDatabaseType>) => Promise<InsertResult> {
+    const { tenant, messageCid, indexes } = queryOptions;
+    const { indexes: appendIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
-        const tagResult = await this.#db
-          .insertInto('eventLogRecordsTags')
-          .values({
-            eventLogWatermark,
-            tag: tag,
-          }).execute();
-        if (tagResult.length !== 1) {
-          //TODO: rollback transaction
-          throw new Error('invalid issue');
-        }
+    return async (tx) => {
+      const result = await tx
+        .insertInto('eventLog')
+        .values({
+          tenant,
+          messageCid,
+          ...appendIndexes
+        })
+        .executeTakeFirstOrThrow();
 
-        const tagId = Number(tagResult[0].insertId);
-        if (Array.isArray(tagValue)) {
-          for (const value of tagValue) {
-            if (typeof value === 'string') {
-              await this.#db
-                .insertInto('eventLogRecordsTagValues')
-                .values({
-                  tag_id      : tagId,
-                  valueString : value,
-                }).execute();
-            } else {
-              await this.#db
-                .insertInto('eventLogRecordsTagValues')
-                .values({
-                  tag_id      : tagId,
-                  valueNumber : value,
-                }).execute();
-            }
-          }
-        } else {
-          if (typeof tagValue === 'string') {
-            await this.#db
-              .insertInto('eventLogRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueString : tagValue,
-              }).execute();
-          } else if (typeof tagValue === 'number') {
-            await this.#db
-              .insertInto('eventLogRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueNumber : tagValue,
-              }).execute();
-          } else {
-            await this.#db
-              .insertInto('eventLogRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueString : String(tagValue),
-              }).execute();
-          }
-        }
+      const messageStoreId = Number(result.insertId);
+
+      // if tags exist, we execute those within the transaction
+      if (Object.keys(tags).length > 0) {
+        await executeTagsInsert({ store: 'eventLog'  ,tx, tags, id: messageStoreId });
       }
-    }
+
+      return result;
+    };
   }
 
   async getEvents(
@@ -191,16 +153,15 @@ export class EventLogSql implements EventLog {
     let query = this.#db
       .selectFrom('eventLog')
       .leftJoin('eventLogRecordsTags', 'eventLogRecordsTags.eventLogWatermark', 'eventLog.watermark')
-      .leftJoin('eventLogRecordsTagValues', 'eventLogRecordsTagValues.tag_id', 'eventLogRecordsTags.id')
+      .leftJoin('eventLogRecordsTagValues', 'eventLogRecordsTagValues.tagId', 'eventLogRecordsTags.id')
       .select('messageCid')
       .distinct()
       .select('watermark')
       .where('tenant', '=', tenant);
 
-    const extractedFilters = extractTagsAndSanitizeFilters(filters);
-
-    if (extractedFilters.length > 0) {
-      query = filterSelectQueryWithTags('eventLog', 'eventLogRecordsTags', extractedFilters, query);
+    if (filters.length > 0) {
+      // filter sanitization takes place within `filterSelectQuery`
+      query = filterSelectQuery(filters, query);
     }
 
     if(cursor !== undefined) {
