@@ -1,6 +1,7 @@
 import { Filter } from '@tbd54566975/dwn-sdk-js';
 import { DynamicModule, ExpressionBuilder, OperandExpression, SelectQueryBuilder, SqlBool } from 'kysely';
-import { sanitizedValue } from './sanitize.js';
+import { extractTagsAndSanitizeFilters, sanitizedValue } from './sanitize.js';
+import { DwnDatabaseType } from '../types.js';
 
 /**
  * Takes multiple Filters and returns a single query.
@@ -10,46 +11,17 @@ import { sanitizedValue } from './sanitize.js';
  * @param query the incoming QueryBuilder.
  * @returns The modified QueryBuilder respecting the provided filters.
  */
-export function filterSelectQueryWithTags<DB = unknown, TB extends keyof DB = keyof DB, O = unknown>(
-  table: TB,
-  tagsTable: TB,
-  filters: { tag: Filter, filter: Filter }[],
-  query: SelectQueryBuilder<DB, TB, O>
-): SelectQueryBuilder<DB, TB, O> {
-  return query.where((eb) => {
-    // we are building multiple OR queries out of each individual filter.
-    const or: OperandExpression<SqlBool>[] = [];
-    for (let { filter, tag } of filters) {
-      // processFilter will take a single filter adding it to the query to be evaluated as an OR operation with the other filters.
-      or.push(processFilterWithTag(table, tagsTable, eb, filter, tag));
-    }
-    // Evaluate the array of expressions as an OR operation.
-    return eb.or(or);
-  });
-}
-
-/**
- * Takes multiple Filters and returns a single query.
- * Each filter is evaluated as an OR operation.
- *
- * @param filters Array of filters to be evaluated as OR operations
- * @param query the incoming QueryBuilder.
- * @returns The modified QueryBuilder respecting the provided filters.
- */
-export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, O = unknown>(
+export function filterSelectQuery<DB = DwnDatabaseType, TB extends keyof DB = keyof DB, O = unknown>(
   filters: Filter[],
   query: SelectQueryBuilder<DB, TB, O>
 ): SelectQueryBuilder<DB, TB, O> {
-  return query.where((eb) => {
-    // we are building multiple OR queries out of each individual filter.
-    const or: OperandExpression<SqlBool>[] = [];
-    for (let filter of filters) {
-      // processFilter will take a single filter adding it to the query to be evaluated as an OR operation with the other filters.
-      or.push(processFilter(eb, filter));
-    }
-    // Evaluate the array of expressions as an OR operation.
-    return eb.or(or);
-  });
+  const extractedFilters = extractTagsAndSanitizeFilters(filters);
+
+  return query.where((eb) =>
+    eb.or(extractedFilters.map(({ filter, tag }) =>
+      processFilterWithTag(eb, filter, tag)
+    ))
+  );
 }
 
 /**
@@ -60,12 +32,12 @@ export function filterSelectQuery<DB = unknown, TB extends keyof DB = keyof DB, 
  *
  * @param eb The ExpressionBuilder from the query.
  * @param filter The filter to be evaluated.
- * @returns An array of OperandExpressions to be evaluated by the caller.
+ * @returns An array of OperandExpression<SqlBool> to be evaluated by the caller.
  */
-function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
+function processFilter<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
   filter: Filter
-):OperandExpression<SqlBool> {
+):OperandExpression<SqlBool>[] {
   const andOperands: OperandExpression<SqlBool>[] = [];
   for (let property in filter) {
     const value = filter[property];
@@ -90,8 +62,7 @@ function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
     }
   }
 
-  // evaluate the the collected operands as an AND operation.
-  return eb.and(andOperands);
+  return andOperands;
 }
 
 
@@ -103,43 +74,22 @@ function processFilter<DB = unknown, TB extends keyof DB = keyof DB>(
  *
  * @param eb The ExpressionBuilder from the query.
  * @param filter The filter to be evaluated.
- * @returns An array of OperandExpressions to be evaluated by the caller.
+ * @returns An a single OperandExpression that represents an AND operation for all of the individual filters to be used by the caller.
  */
-function processFilterWithTag<DB = unknown, TB extends keyof DB = keyof DB>(
-  table: TB,
-  tagsTable: TB,
+function processFilterWithTag<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
   filter: Filter,
   tag: Filter,
 ):OperandExpression<SqlBool> {
-  const andOperands: OperandExpression<SqlBool>[] = [];
-  for (let property in filter) {
-    const value = filter[property];
-    const column = new DynamicModule().ref(property);
-    if (Array.isArray(value)) { // OneOfFilter
-      andOperands.push(eb(column, 'in', value));
-    } else if (typeof value === 'object') { // RangeFilter
-      if (value.gt) {
-        andOperands.push(eb(column, '>', sanitizedValue(value.gt)));
-      }
-      if (value.gte) {
-        andOperands.push(eb(column, '>=', sanitizedValue(value.gte)));
-      }
-      if (value.lt) {
-        andOperands.push(eb(column, '<', sanitizedValue(value.lt)));
-      }
-      if (value.lte) {
-        andOperands.push(eb(column, '<=', sanitizedValue(value.lte)));
-      }
-    } else { // EqualFilter
-      andOperands.push(eb(column, '=', sanitizedValue(value)));
-    }
-  }
 
   const tagColumn = new DynamicModule().ref('tag');
   const valueNumber = new DynamicModule().ref('valueNumber');
   const valueString = new DynamicModule().ref('valueString');
 
+  // process the regular filters
+  const andOperands = processFilter(eb, filter);
+
+  // process each tag and add it to the andOperands from the rest of the filters
   for (let property in tag) {
     andOperands.push(eb(tagColumn, '=', property));
     const value = tag[property];

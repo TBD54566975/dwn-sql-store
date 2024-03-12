@@ -12,14 +12,15 @@ import {
   PaginationCursor,
 } from '@tbd54566975/dwn-sdk-js';
 
-import { Kysely } from 'kysely';
+import { InsertResult, Kysely, Transaction } from 'kysely';
 import { DwnDatabaseType, KeyValues } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
-import { filterSelectQueryWithTags } from './utils/filter.js';
-import { extractTagsAndSanitizeFilters, extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
+import { filterSelectQuery } from './utils/filter.js';
+import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
+import { executeTagsInsert } from './utils/tags.js';
 
 
 export class MessageStoreSql implements MessageStore {
@@ -83,7 +84,7 @@ export class MessageStoreSql implements MessageStore {
     let createRecordsTagValuesTable = this.#db.schema
       .createTable('messageStoreRecordsTagValues')
       .ifNotExists()
-      .addColumn('tag_id', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStoreRecordsTags', 'id'))
+      .addColumn('tagId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStoreRecordsTags', 'id'))
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
 
@@ -141,80 +142,42 @@ export class MessageStoreSql implements MessageStore {
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
 
-    const { indexes:putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
-    const db = this.#db;
-    const result = await db
-      .insertInto('messageStore')
-      .values({
-        tenant,
-        messageCid,
-        encodedMessageBytes,
-        encodedData,
-        ...putIndexes
-      })
-      .execute();
+    await this.#db.transaction().execute(this.executePutTransaction({
+      tenant, messageCid, encodedMessageBytes, encodedData, indexes
+    }));
+  }
 
-    if (result[0] && result[0].insertId && Object.keys(tags).length > 0) {
-      const messageStoreId = Number(result[0].insertId);
-      for (const tag in tags) {
-        const tagValue = tags[tag];
+  private executePutTransaction(queryOptions: {
+    tenant: string;
+    messageCid: string;
+    encodedMessageBytes: Buffer;
+    encodedData: string | null;
+    indexes: KeyValues;
+  }): (tx: Transaction<DwnDatabaseType>) => Promise<InsertResult> {
+    const { tenant, messageCid, encodedMessageBytes, encodedData, indexes } = queryOptions;
+    const { indexes: putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
-        const tagResult = await db
-          .insertInto('messageStoreRecordsTags')
-          .values({
-            messageStoreId,
-            tag: tag,
-          }).execute();
-        if (tagResult.length !== 1) {
-          //TODO: rollback transaction
-          throw new Error('invalid issue');
-        }
+    return async (tx) => {
+      const result = await tx
+        .insertInto('messageStore')
+        .values({
+          tenant,
+          messageCid,
+          encodedMessageBytes,
+          encodedData,
+          ...putIndexes
+        })
+        .executeTakeFirstOrThrow();
 
-        const tagId = Number(tagResult[0].insertId);
-        if (Array.isArray(tagValue)) {
-          for (const value of tagValue) {
-            if (typeof value === 'string') {
-              await db
-                .insertInto('messageStoreRecordsTagValues')
-                .values({
-                  tag_id      : tagId,
-                  valueString : value,
-                }).execute();
-            } else {
-              await db
-                .insertInto('messageStoreRecordsTagValues')
-                .values({
-                  tag_id      : tagId,
-                  valueNumber : value,
-                }).execute();
-            }
-          }
-        } else {
-          if (typeof tagValue === 'string') {
-            await db
-              .insertInto('messageStoreRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueString : tagValue,
-              }).execute();
-          } else if (typeof tagValue === 'number') {
-            await db
-              .insertInto('messageStoreRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueNumber : tagValue,
-              }).execute();
-          } else {
-            await db
-              .insertInto('messageStoreRecordsTagValues')
-              .values({
-                tag_id      : tagId,
-                valueString : String(tagValue),
-              }).execute();
-          }
-        }
+      const messageStoreId = Number(result.insertId);
+
+      // if tags exist, we execute those within the transaction
+      if (Object.keys(tags).length > 0) {
+        await executeTagsInsert({ store: 'messageStore'  ,tx, tags, id: messageStoreId });
       }
-    }
+
+      return result;
+    };
   }
 
   async get(
@@ -268,7 +231,7 @@ export class MessageStoreSql implements MessageStore {
     let query = this.#db
       .selectFrom('messageStore')
       .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageStoreId', 'messageStore.id')
-      .leftJoin('messageStoreRecordsTagValues', 'messageStoreRecordsTagValues.tag_id', 'messageStoreRecordsTags.id')
+      .leftJoin('messageStoreRecordsTagValues', 'messageStoreRecordsTagValues.tagId', 'messageStoreRecordsTags.id')
       .select('messageCid')
       .distinct()
       .select([
@@ -278,11 +241,8 @@ export class MessageStoreSql implements MessageStore {
       ])
       .where('tenant', '=', tenant);
 
-    const extractedFilters = extractTagsAndSanitizeFilters(filters);
-
-    // add filters to query
-    // query = filterSelectQuery(filters, query);
-    query = filterSelectQueryWithTags('messageStore', 'messageStoreRecordsTags', extractedFilters, query);
+    // filter sanitization takes place within `filterSelectQuery`
+    query = filterSelectQuery(filters, query);
 
     if(pagination?.cursor !== undefined) {
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
