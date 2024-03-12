@@ -84,7 +84,7 @@ type MessageStoreRecordsTagsTable = {
 };
 
 type MessageStoreRecordsTagValuesTable = {
-  tag_id: number;
+  tagId: number;
   valueString: string | null;
   valueNumber: number | null;
 };
@@ -96,7 +96,7 @@ type EventLogRecordsTagsTable = {
 };
 
 type EventLogRecordsTagValuesTable = {
-  tag_id: number;
+  tagId: number;
   valueString: string | null;
   valueNumber: number | null;
 };
