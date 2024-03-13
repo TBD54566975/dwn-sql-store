@@ -1,73 +1,80 @@
-import { InsertResult, Transaction } from 'kysely';
+import { Dialect } from '../dialect/dialect.js';
+import { Transaction } from 'kysely';
 import { DwnDatabaseType, KeyValues } from '../types.js';
 import { sanitizedValue } from './sanitize.js';
 
 export async function executeTagsInsert(options: {
+  dialect: Dialect,
   store: 'messageStore' | 'eventLog'
   id: number;
   tags: KeyValues;
   tx: Transaction<DwnDatabaseType>;
 }):Promise<void> {
-  const { store, id, tags, tx } = options;
-
+  const { dialect, store, id, tags, tx } = options;
   if (Object.keys(tags).length > 0) {
     for (const tag in tags) {
-      const tagInsert = await insertTag({ store, id, tag, tx });
+      const tagInsert = await insertTag({ dialect, store, id, tag, tx });
       const tagId = Number(tagInsert.insertId);
       const tagValue = tags[tag];
-      if (Array.isArray(tagValue)) {
-        for (const value of tagValue) {
-          await insertTagValue({ store, tx, tagId, value });
-        }
-      } else {
-        await insertTagValue({ store, tx, tagId, value: tagValue });
-      }
+      await insertTagValues({
+        store,
+        tx,
+        tagId,
+        values: Array.isArray(tagValue) ? tagValue : [ tagValue ]
+      });
     }
   }
 }
 
 export async function insertTag(options: {
+  dialect: Dialect,
   store: 'messageStore' | 'eventLog'
   id: number;
   tag: string;
   tx: Transaction<DwnDatabaseType>;
-}): Promise<InsertResult> {
-  const { store, id, tx, tag } = options;
+}): Promise<{ insertId: number }> {
+  const { store, id, tx, tag, dialect } = options;
   if (store === 'messageStore') {
-    return  tx
-      .insertInto('messageStoreRecordsTags')
-      .values({ messageStoreId: id, tag })
-      .executeTakeFirstOrThrow();
+    return dialect.insertIntoAndReturning(
+      tx,
+      'messageStoreRecordsTags',
+      { messageStoreId: id, tag },
+      'id as insertId'
+    ).executeTakeFirstOrThrow();
   } else {
-    return  tx
-      .insertInto('eventLogRecordsTags')
-      .values({ eventLogWatermark: id, tag })
-      .executeTakeFirstOrThrow();
+    return await dialect.insertIntoAndReturning(
+      tx,
+      'eventLogRecordsTags',
+      { eventLogWatermark: id, tag },
+      'id as insertId'
+    ).executeTakeFirstOrThrow();
   }
 }
 
-export async function insertTagValue(options: {
+export async function insertTagValues(options: {
   store: 'messageStore' | 'eventLog'
   tx: Transaction<DwnDatabaseType>;
   tagId: number;
-  value: string | number | boolean
+  values: Array<string | number | boolean>
 }): Promise<void> {
-  const { store, tx, tagId, value } = options;
-  const sanitizedTagValue = sanitizedValue(value);
+  const { store, tx, tagId, values } = options;
 
-  const values = {
-    tagId,
-    valueNumber : typeof sanitizedTagValue === 'number' ? sanitizedTagValue : null,
-    valueString : typeof sanitizedTagValue === 'string' ? sanitizedTagValue : null,
-  };
+  const insertValues = values.map(value => {
+    const insertValue = sanitizedValue(value);
+    return {
+      tagId,
+      valueNumber : typeof insertValue === 'number' ? insertValue : null,
+      valueString : typeof insertValue === 'string' ? insertValue : null,
+    };
+  });
 
   if (store === 'messageStore') {
     await tx.insertInto('messageStoreRecordsTagValues')
-      .values({ ...values })
+      .values(insertValues)
       .execute();
   } else {
     await tx.insertInto('eventLogRecordsTagValues')
-      .values({ ...values })
+      .values(insertValues)
       .execute();
   }
 }

@@ -97,7 +97,7 @@ function processFilterWithTag<DB = DwnDatabaseType, TB extends keyof DB = keyof 
       if (value.some(val => typeof val === 'number')) {
         andOperands.push(eb(valueNumber, 'in', value));
       } else {
-        andOperands.push(eb(valueString, 'in', String(value)));
+        andOperands.push(eb(valueString, 'in', value.map(v => String(v))));
       }
     } else if (typeof value === 'object') { // RangeFilter
       if (value.gt) {

@@ -3,7 +3,13 @@ import {
   ColumnBuilderCallback,
   ColumnDefinitionBuilder,
   CreateTableBuilder,
+  Kysely,
+  InsertObject,
+  InsertQueryBuilder,
+  SelectExpression,
+  Selection,
   SqliteDialect as KyselySqliteDialect,
+  Transaction,
 } from 'kysely';
 
 export class SqliteDialect extends KyselySqliteDialect implements Dialect {
@@ -38,5 +44,14 @@ export class SqliteDialect extends KyselySqliteDialect implements Dialect {
     onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default' = 'cascade',
   ): ColumnDefinitionBuilder {
     return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
+  }
+
+  insertIntoAndReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
+    db: Transaction<DB> | Kysely<DB>,
+    table: TB & string,
+    values: InsertObject<DB, TB & string>,
+    returning: SE,
+  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE>> {
+    return db.insertInto(table).values(values).returning(returning);
   }
 }
