@@ -47,12 +47,12 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
     return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
   }
 
-  insertIntoAndReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = AnyColumn<DB, TB>>(
+  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = AnyColumn<DB, TB>>(
     db: Transaction<DB> | Kysely<DB>,
     table: TB & string,
     values: InsertObject<DB, TB & string>,
-    _returning: SE,
-  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE>> {
+    _returning: SE & `${string} as insertId`,
+  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE & `${string} as insertId`>> {
     return db.insertInto(table).values(values);
   }
 }

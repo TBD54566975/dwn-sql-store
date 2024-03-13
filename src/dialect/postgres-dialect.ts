@@ -40,12 +40,12 @@ export class PostgresDialect extends KyselyPostgresDialect implements Dialect {
     return builder.references(`${referenceTable}.${referenceColumnName}`).onDelete(onDeleteAction);
   }
 
-  insertIntoAndReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
+  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
     db: Transaction<DB> | Kysely<DB>,
     table: TB & string,
     values: InsertObject<DB, TB & string>,
-    returning: SE,
-  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE>> {
+    returning: SE & `${string} as insertId`,
+  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE & `${string} as insertId`>> {
     return db.insertInto(table).values(values).returning(returning);
   }
 
