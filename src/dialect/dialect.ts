@@ -2,7 +2,13 @@ import {
   ColumnBuilderCallback,
   ColumnDefinitionBuilder,
   CreateTableBuilder,
-  Dialect as KyselyDialect
+  Dialect as KyselyDialect,
+  Kysely,
+  InsertObject,
+  InsertQueryBuilder,
+  Selection,
+  SelectExpression,
+  Transaction
 } from 'kysely';
 
 export interface Dialect extends KyselyDialect {
@@ -27,4 +33,10 @@ export interface Dialect extends KyselyDialect {
     onDeleteAction?: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
   ): ColumnDefinitionBuilder;
 
+  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
+    db: Transaction<DB> | Kysely<DB>,
+    table: TB & string,
+    values: InsertObject<DB, TB & string>,
+    returning: SE,
+  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE>>;
 }

@@ -3,7 +3,7 @@ import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js
 
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
-import { InsertResult, Kysely, Transaction } from 'kysely';
+import { Kysely, Transaction } from 'kysely';
 import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
 import { executeTagsInsert } from './utils/tags.js';
 
@@ -105,28 +105,25 @@ export class EventLogSql implements EventLog {
     tenant: string;
     messageCid: string;
     indexes: KeyValues;
-  }): (tx: Transaction<DwnDatabaseType>) => Promise<InsertResult> {
+  }): (tx: Transaction<DwnDatabaseType>) => Promise<void> {
     const { tenant, messageCid, indexes } = queryOptions;
     const { indexes: appendIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
     return async (tx) => {
-      const result = await tx
-        .insertInto('eventLog')
-        .values({
+      const result = await this.#dialect
+        .insertIntoAndReturning(tx, 'eventLog',{
           tenant,
           messageCid,
-          ...appendIndexes
-        })
+          ...appendIndexes,
+        }, 'watermark as insertId')
         .executeTakeFirstOrThrow();
 
       const messageStoreId = Number(result.insertId);
 
       // if tags exist, we execute those within the transaction
       if (Object.keys(tags).length > 0) {
-        await executeTagsInsert({ store: 'eventLog'  ,tx, tags, id: messageStoreId });
+        await executeTagsInsert({ dialect: this.#dialect, store: 'eventLog'  ,tx, tags, id: messageStoreId });
       }
-
-      return result;
     };
   }
 
