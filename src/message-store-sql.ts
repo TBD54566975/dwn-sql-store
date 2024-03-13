@@ -12,7 +12,7 @@ import {
   PaginationCursor,
 } from '@tbd54566975/dwn-sdk-js';
 
-import { InsertResult, Kysely, Transaction } from 'kysely';
+import { Kysely, Transaction } from 'kysely';
 import { DwnDatabaseType, KeyValues } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
@@ -153,30 +153,27 @@ export class MessageStoreSql implements MessageStore {
     encodedMessageBytes: Buffer;
     encodedData: string | null;
     indexes: KeyValues;
-  }): (tx: Transaction<DwnDatabaseType>) => Promise<InsertResult> {
+  }): (tx: Transaction<DwnDatabaseType>) => Promise<void> {
     const { tenant, messageCid, encodedMessageBytes, encodedData, indexes } = queryOptions;
     const { indexes: putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
     return async (tx) => {
-      const result = await tx
-        .insertInto('messageStore')
-        .values({
-          tenant,
-          messageCid,
-          encodedMessageBytes,
-          encodedData,
-          ...putIndexes
-        })
-        .executeTakeFirstOrThrow();
+
+      const result = await this.#dialect.insertIntoAndReturning(tx, 'messageStore', {
+        tenant,
+        messageCid,
+        encodedMessageBytes,
+        encodedData,
+        ...putIndexes
+      }, 'id as insertId').executeTakeFirstOrThrow();
 
       const messageStoreId = Number(result.insertId);
 
       // if tags exist, we execute those within the transaction
       if (Object.keys(tags).length > 0) {
-        await executeTagsInsert({ store: 'messageStore'  ,tx, tags, id: messageStoreId });
+        await executeTagsInsert({ dialect: this.#dialect, store: 'messageStore'  ,tx, tags, id: messageStoreId });
       }
 
-      return result;
     };
   }
 
