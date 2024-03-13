@@ -1,80 +1,61 @@
-import { Dialect } from '../dialect/dialect.js';
 import { Transaction } from 'kysely';
-import { DwnDatabaseType, KeyValues } from '../types.js';
+
+import type { DwnDatabaseType, KeyValues } from '../types.js';
+
+import { Dialect } from '../dialect/dialect.js';
 import { sanitizedValue } from './sanitize.js';
 
-export async function executeTagsInsert(options: {
-  dialect: Dialect,
-  store: 'messageStore' | 'eventLog'
-  id: number;
-  tags: KeyValues;
-  tx: Transaction<DwnDatabaseType>;
-}):Promise<void> {
-  const { dialect, store, id, tags, tx } = options;
-  if (Object.keys(tags).length > 0) {
+/**
+ * Helper class to manage adding indexes for `RecordsWrite` messages which contain `tags`.
+ */
+export class TagTables {
+
+  /**
+   * @param dialect the target dialect, necessary for returning the `insertId`
+   * @param table the DB Table in order to index the tags and values in the correct tables. Choice between `messageStore` and `eventLog`
+   */
+  constructor(private dialect: Dialect, private table: 'messageStore' | 'eventLog'){}
+
+  /**
+   * Inserts the given tag and value associates to the parent Id.
+   */
+  async executeTagsInsert(
+    id: number,
+    tags: KeyValues,
+    tx: Transaction<DwnDatabaseType>,
+  ):Promise<void> {
+    const tagTable = this.table === 'messageStore' ? 'messageStoreRecordsTags' : 'eventLogRecordsTags';
+    const tagValue = tagTable === 'messageStoreRecordsTags' ? { messageStoreId: id } : { eventLogWatermark: id };
+
     for (const tag in tags) {
-      const tagInsert = await insertTag({ dialect, store, id, tag, tx });
-      const tagId = Number(tagInsert.insertId);
-      const tagValue = tags[tag];
-      await insertTagValues({
-        store,
-        tx,
-        tagId,
-        values: Array.isArray(tagValue) ? tagValue : [ tagValue ]
-      });
+      const { insertId } = await this.dialect.insertIntoReturning(tx, tagTable, { ...tagValue, tag }, 'id as insertId').executeTakeFirstOrThrow();
+      const tagId = Number(insertId);
+      const tagValues = tags[tag];
+      const values = Array.isArray(tagValues) ? tagValues : [ tagValues ];
+      await this.insertTagValues(tagId, values, tx);
     }
   }
-}
 
-export async function insertTag(options: {
-  dialect: Dialect,
-  store: 'messageStore' | 'eventLog'
-  id: number;
-  tag: string;
-  tx: Transaction<DwnDatabaseType>;
-}): Promise<{ insertId: number }> {
-  const { store, id, tx, tag, dialect } = options;
-  if (store === 'messageStore') {
-    return dialect.insertIntoAndReturning(
-      tx,
-      'messageStoreRecordsTags',
-      { messageStoreId: id, tag },
-      'id as insertId'
-    ).executeTakeFirstOrThrow();
-  } else {
-    return await dialect.insertIntoAndReturning(
-      tx,
-      'eventLogRecordsTags',
-      { eventLogWatermark: id, tag },
-      'id as insertId'
-    ).executeTakeFirstOrThrow();
-  }
-}
+  /**
+   * Inserts the tag values for a given tag id.
+   */
+  private async insertTagValues(
+    tagId: number,
+    values: Array<string | number | boolean>,
+    tx: Transaction<DwnDatabaseType>,
+  ): Promise<void> {
+    const tagValueTable = this.table === 'messageStore' ? 'messageStoreRecordsTagValues' : 'eventLogRecordsTagValues';
 
-export async function insertTagValues(options: {
-  store: 'messageStore' | 'eventLog'
-  tx: Transaction<DwnDatabaseType>;
-  tagId: number;
-  values: Array<string | number | boolean>
-}): Promise<void> {
-  const { store, tx, tagId, values } = options;
-
-  const insertValues = values.map(value => {
-    const insertValue = sanitizedValue(value);
-    return {
-      tagId,
-      valueNumber : typeof insertValue === 'number' ? insertValue : null,
-      valueString : typeof insertValue === 'string' ? insertValue : null,
+    const formatValue = (value: string | number | boolean) =>  {
+      const insertValue = sanitizedValue(value);
+      return {
+        tagId,
+        valueNumber : typeof insertValue === 'number' ? insertValue : null,
+        valueString : typeof insertValue === 'string' ? insertValue : null,
+      };
     };
-  });
 
-  if (store === 'messageStore') {
-    await tx.insertInto('messageStoreRecordsTagValues')
-      .values(insertValues)
-      .execute();
-  } else {
-    await tx.insertInto('eventLogRecordsTagValues')
-      .values(insertValues)
-      .execute();
+    const insertValues = values.map(formatValue);
+    await tx.insertInto(tagValueTable).values(insertValues).execute();
   }
 }
