@@ -5,14 +5,16 @@ import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
 import { Kysely, Transaction } from 'kysely';
 import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
-import { executeTagsInsert } from './utils/tags.js';
+import { TagTables } from './utils/tags.js';
 
 export class EventLogSql implements EventLog {
   #dialect: Dialect;
   #db: Kysely<DwnDatabaseType> | null = null;
+  #tags: TagTables;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
+    this.#tags = new TagTables(dialect, 'eventLog');
   }
 
   async open(): Promise<void> {
@@ -96,6 +98,9 @@ export class EventLogSql implements EventLog {
       );
     }
 
+    // we execute the insert in a transaction as we are making multiple inserts into multiple tables.
+    // if any of these inserts would throw, the whole transaction would be rolled back.
+    // otherwise it is committed.
     await this.#db.transaction().execute(this.executePutTransaction({
       tenant, messageCid, indexes
     }));
@@ -107,22 +112,27 @@ export class EventLogSql implements EventLog {
     indexes: KeyValues;
   }): (tx: Transaction<DwnDatabaseType>) => Promise<void> {
     const { tenant, messageCid, indexes } = queryOptions;
+
+    // we extract the tag indexes into their own object to be inserted separately.
+    // we also sanitize the indexes to convert any `boolean` values to `text` representations.
     const { indexes: appendIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
     return async (tx) => {
+
+      const eventIndexValues = {
+        tenant,
+        messageCid,
+        ...appendIndexes,
+      };
+
+      // we use the dialect-specific `insertIntoReturning` in order to be able to extract the `insertId`
       const result = await this.#dialect
-        .insertIntoAndReturning(tx, 'eventLog',{
-          tenant,
-          messageCid,
-          ...appendIndexes,
-        }, 'watermark as insertId')
+        .insertIntoReturning(tx, 'eventLog', eventIndexValues, 'watermark as insertId')
         .executeTakeFirstOrThrow();
 
-      const messageStoreId = Number(result.insertId);
-
-      // if tags exist, we execute those within the transaction
+      // if tags exist, we execute those within the transaction associating them with the `insertId`.
       if (Object.keys(tags).length > 0) {
-        await executeTagsInsert({ dialect: this.#dialect, store: 'eventLog'  ,tx, tags, id: messageStoreId });
+        await this.#tags.executeTagsInsert(result.insertId, tags, tx);
       }
     };
   }

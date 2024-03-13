@@ -20,15 +20,17 @@ import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
 import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
-import { executeTagsInsert } from './utils/tags.js';
+import { TagTables } from './utils/tags.js';
 
 
 export class MessageStoreSql implements MessageStore {
   #dialect: Dialect;
+  #tags: TagTables;
   #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
+    this.#tags = new TagTables(dialect, 'messageStore');
   }
 
   async open(): Promise<void> {
@@ -142,6 +144,9 @@ export class MessageStoreSql implements MessageStore {
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
 
+    // we execute the insert in a transaction as we are making multiple inserts into multiple tables.
+    // if any of these inserts would throw, the whole transaction would be rolled back.
+    // otherwise it is committed.
     await this.#db.transaction().execute(this.executePutTransaction({
       tenant, messageCid, encodedMessageBytes, encodedData, indexes
     }));
@@ -155,23 +160,29 @@ export class MessageStoreSql implements MessageStore {
     indexes: KeyValues;
   }): (tx: Transaction<DwnDatabaseType>) => Promise<void> {
     const { tenant, messageCid, encodedMessageBytes, encodedData, indexes } = queryOptions;
+
+    // we extract the tag indexes into their own object to be inserted separately.
+    // we also sanitize the indexes to convert any `boolean` values to `text` representations.
     const { indexes: putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
 
     return async (tx) => {
 
-      const result = await this.#dialect.insertIntoAndReturning(tx, 'messageStore', {
+      const messageIndexValues = {
         tenant,
         messageCid,
         encodedMessageBytes,
         encodedData,
         ...putIndexes
-      }, 'id as insertId').executeTakeFirstOrThrow();
+      };
 
-      const messageStoreId = Number(result.insertId);
+      // we use the dialect-specific `insertIntoReturning` in order to be able to extract the `insertId`
+      const result = await this.#dialect
+        .insertIntoReturning(tx, 'messageStore', messageIndexValues, 'id as insertId')
+        .executeTakeFirstOrThrow();
 
-      // if tags exist, we execute those within the transaction
+      // if tags exist, we execute those within the transaction associating them with the `insertId`.
       if (Object.keys(tags).length > 0) {
-        await executeTagsInsert({ dialect: this.#dialect, store: 'messageStore'  ,tx, tags, id: messageStoreId });
+        await this.#tags.executeTagsInsert(result.insertId, tags, tx);
       }
 
     };
