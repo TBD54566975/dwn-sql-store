@@ -1,6 +1,6 @@
 import {
   ColumnBuilderCallback,
-  ColumnDefinitionBuilder,
+  ColumnDataType,
   CreateTableBuilder,
   Dialect as KyselyDialect,
   Kysely,
@@ -8,7 +8,7 @@ import {
   InsertQueryBuilder,
   Selection,
   SelectExpression,
-  Transaction
+  Transaction,
 } from 'kysely';
 
 export interface Dialect extends KyselyDialect {
@@ -26,12 +26,15 @@ export interface Dialect extends KyselyDialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB>;
 
-  addReferencedColumn(
-    builder: ColumnDefinitionBuilder,
+  addReferencedColumn<TB extends string>(
+    builder: CreateTableBuilder<TB & string>,
+    tableName: TB,
+    columnName: string,
+    targetType: ColumnDataType,
     referenceTable: string,
     referenceColumnName: string,
-    onDeleteAction?: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
-  ): ColumnDefinitionBuilder;
+    onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
+  ): CreateTableBuilder<TB & string>;
 
   /**
    * This is a helper method to return an `insertId` for each dialect.
