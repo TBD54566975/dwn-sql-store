@@ -63,19 +63,19 @@ export class EventLogSql implements EventLog {
     let createRecordsTagsTable = this.#db.schema
       .createTable('eventLogRecordsTags')
       .ifNotExists()
-      .addColumn('eventLogWatermark', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLog', 'watermark'))
       .addColumn('tag', 'text', (col) => col.notNull());
 
     let createRecordsTagValuesTable = this.#db.schema
       .createTable('eventLogRecordsTagValues')
       .ifNotExists()
-      .addColumn('tagId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'eventLogRecordsTags', 'id'))
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
 
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'eventLogRecordsTags', 'eventLogWatermark', 'integer', 'eventLog', 'watermark', 'cascade');
+    createRecordsTagValuesTable = this.#dialect.addReferencedColumn(createRecordsTagValuesTable, 'eventLogRecordsTagValues', 'tagId', 'integer', 'eventLogRecordsTags', 'id', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
