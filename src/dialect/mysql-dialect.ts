@@ -1,8 +1,16 @@
 import { Dialect } from './dialect.js';
 import {
+  AnyColumn,
+  ColumnDataType,
   CreateTableBuilder,
   ColumnBuilderCallback,
-  MysqlDialect as KyselyMysqlDialect
+  InsertObject,
+  InsertQueryBuilder,
+  SelectExpression,
+  Selection,
+  Transaction,
+  MysqlDialect as KyselyMysqlDialect,
+  Kysely,
 } from 'kysely';
 
 export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
@@ -28,5 +36,34 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB> {
     return builder.addColumn(columnName, 'blob', callback);
+  }
+
+  addReferencedColumn<TB extends string>(
+    builder: CreateTableBuilder<TB & string>,
+    tableName: TB,
+    columnName: string,
+    targetType: ColumnDataType,
+    referenceTable: string,
+    referenceColumnName: string,
+    onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
+  ): CreateTableBuilder<TB & string> {
+    return builder
+      .addColumn(columnName, targetType, (col) => col.notNull())
+      .addForeignKeyConstraint(
+        `${referenceTable}${referenceColumnName}_${tableName}${columnName}`,
+        [columnName],
+        referenceTable,
+        [referenceColumnName],
+        (constraint) => constraint.onDelete(onDeleteAction)
+      );
+  }
+
+  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = AnyColumn<DB, TB>>(
+    db: Transaction<DB> | Kysely<DB>,
+    table: TB & string,
+    values: InsertObject<DB, TB & string>,
+    _returning: SE & `${string} as insertId`,
+  ): InsertQueryBuilder<DB, TB & string, Selection<DB, TB & string, SE & `${string} as insertId`>> {
+    return db.insertInto(table).values(values);
   }
 }
