@@ -80,13 +80,12 @@ export class MessageStoreSql implements MessageStore {
     let createRecordsTagsTable = this.#db.schema
       .createTable('messageStoreRecordsTags')
       .ifNotExists()
-      .addColumn('messageStoreId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStore', 'id'))
       .addColumn('tag', 'text', (col) => col.notNull());
+
 
     let createRecordsTagValuesTable = this.#db.schema
       .createTable('messageStoreRecordsTagValues')
       .ifNotExists()
-      .addColumn('tagId', 'integer', (col) => this.#dialect.addReferencedColumn(col, 'messageStoreRecordsTags', 'id'))
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
 
@@ -94,6 +93,8 @@ export class MessageStoreSql implements MessageStore {
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageStoreId', 'integer', 'messageStore', 'id', 'cascade');
+    createRecordsTagValuesTable = this.#dialect.addReferencedColumn(createRecordsTagValuesTable, 'messageStoreRecordsTagValues', 'tagId', 'integer', 'messageStoreRecordsTags', 'id', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
