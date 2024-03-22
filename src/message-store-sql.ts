@@ -48,6 +48,7 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('dataCid', 'text')
       .addColumn('dataSize', 'integer')
       .addColumn('dateCreated', 'text')
+      .addColumn('delegated', 'text')
       .addColumn('messageTimestamp', 'text')
       .addColumn('dataFormat', 'text')
       .addColumn('isLatestBaseState', 'text')
