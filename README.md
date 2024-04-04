@@ -83,6 +83,26 @@ const dwn = await Dwn.create({ messageStore, dataStore, eventLog });
 
 ## PostgreSQL
 
+NOTE: PostgreSQL requires setting the `LC_COLLATE` and `LC_CTYPE`to `C` during database creation.
+examples:
+
+When using `docker` include the following option
+```
+POSTGRES_INITDB_ARGS='--lc-collate=C --lc-ctype=C'
+```
+
+Or when creating the database.
+```
+CREATE DATABASE dwn_data_store_dev
+  WITH ENCODING='UTF8'
+  ...
+       LC_COLLATE='C'
+       LC_CTYPE='C'
+  ...
+
+```
+
+
 ```typescript
 import pg from 'pg';
 import Cursor from 'pg-cursor';
