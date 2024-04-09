@@ -10,6 +10,9 @@ export function extractTagsAndSanitizeIndexes(records: KeyValues): {
   const indexes = { ...records };
 
   sanitizeIndexes(indexes);
+
+  // tag values are prefixed with 'tag.', we extract them to be inserted separately into the tags reference tables.
+  // we delete them from the `indexes` object so they are not included in the main insert.
   for (let key in indexes) {
     if (key.startsWith('tag.')) {
       let value = indexes[key];
@@ -59,6 +62,8 @@ export function extractTagsAndSanitizeFilters(filters: Filter[]): {
     const tagFilter = {};
     const filterCopy = { ...filter };
 
+    // tag values are prefixed with 'tag.', we extract them to be queried for separately from the tags tables.
+    // we delete them from the `filter` object so they are not included in the main query.
     for (let key in filterCopy) {
       if (key.startsWith('tag.')) {
         let value = filterCopy[key];

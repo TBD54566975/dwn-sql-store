@@ -28,7 +28,7 @@ export function filterSelectQuery<DB = DwnDatabaseType, TB extends keyof DB = ke
  * Returns an array of OperandExpressions for a single filter.
  * Each property within the filter is evaluated as an AND operand,
  * if a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
- * This way each Filer has to be a complete match, but the collection of filters can be evaluated as chosen.
+ * This way each Filter has to be a complete match, but the collection of filters can be evaluated as chosen.
  *
  * @param eb The ExpressionBuilder from the query.
  * @param filter The filter to be evaluated.
@@ -67,13 +67,14 @@ function processFilter<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
 
 
 /**
- * Returns an array of OperandExpressions for a single filter.
- * Each property within the filter is evaluated as an AND operand,
+ * Returns an array of OperandExpressions for a single filter and a tags filter.
+ * Each property within filters are evaluated as an AND operand,
  * if a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
- * This way each Filer has to be a complete match, but the collection of filters can be evaluated as chosen.
+ * This way each Filter has to be a complete match, but the collection of filters can be evaluated as chosen.
  *
  * @param eb The ExpressionBuilder from the query.
  * @param filter The filter to be evaluated.
+ * @param tag The tags filter to be evaluated.
  * @returns An a single OperandExpression that represents an AND operation for all of the individual filters to be used by the caller.
  */
 function processFilterWithTag<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(

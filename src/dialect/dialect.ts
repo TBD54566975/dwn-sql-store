@@ -26,6 +26,25 @@ export interface Dialect extends KyselyDialect {
     callback?: ColumnBuilderCallback
   ): CreateTableBuilder<TB>;
 
+  /**
+   * This is a helper method to add a column with foreign key constraints.
+   * This is primarily useful because the `mySQL` dialect adds the constraints in a different way than `sqlite` and `postgres`.
+   *
+   * @param builder the CreateTableBuilder to add the column to.
+   * @param tableName the name of the table to add the column to.
+   * @param columnName the name of the column to add.
+   * @param targetType the type of the column to add.
+   * @param referenceTable the foreign table to reference.
+   * @param referenceColumnName the foreign column to reference.
+   * @param onDeleteAction the action to take when the referenced row is deleted.
+   *
+   * The ForeignKey name it creates in `mysql` will be in the following format:
+   * `${referenceTable}${referenceColumnName}_${tableName}${columnName}`
+   * ex: if the reference table is `users` and the reference column is `id` and the table is `profiles` and the column is `userId`,
+   * the resulting name for the foreign key is: `usersid_profilesuserId`
+   *
+   * @returns {CreateTableBuilder} the CreateTableBuilder with the added column.
+   */
   addReferencedColumn<TB extends string>(
     builder: CreateTableBuilder<TB & string>,
     tableName: TB,
