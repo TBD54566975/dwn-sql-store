@@ -15,30 +15,34 @@ export function filterSelectQuery<DB = DwnDatabaseType, TB extends keyof DB = ke
   filters: Filter[],
   query: SelectQueryBuilder<DB, TB, O>
 ): SelectQueryBuilder<DB, TB, O> {
-  const extractedFilters = extractTagsAndSanitizeFilters(filters);
+  const sanitizedFilters = extractTagsAndSanitizeFilters(filters);
 
   return query.where((eb) =>
-    eb.or(extractedFilters.map(({ filter, tag }) =>
-      processFilterWithTag(eb, filter, tag)
-    ))
+    eb.or(sanitizedFilters.map(({ filter, tags }) => {
+      const andOperands: OperandExpression<SqlBool>[] = [];
+
+      processFilter(eb, andOperands, filter);
+      processTags(eb, andOperands, tags);
+
+      // evaluate the the collected operands as an AND operation.
+      return eb.and(andOperands);
+    }))
   );
 }
 
 /**
- * Returns an array of OperandExpressions for a single filter.
- * Each property within the filter is evaluated as an AND operand,
- * if a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
- * This way each Filter has to be a complete match, but the collection of filters can be evaluated as chosen.
+ * Processes each property in the non-tags filter as an AND operand and adds it to the `andOperands` array.
+ * If a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
  *
  * @param eb The ExpressionBuilder from the query.
+ * @param andOperands The array of AND operands to append to.
  * @param filter The filter to be evaluated.
- * @returns An array of OperandExpression<SqlBool> to be evaluated by the caller.
  */
 function processFilter<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
+  andOperands: OperandExpression<SqlBool>[],
   filter: Filter
-):OperandExpression<SqlBool>[] {
-  const andOperands: OperandExpression<SqlBool>[] = [];
+): void {
   for (let property in filter) {
     const value = filter[property];
     const column = new DynamicModule().ref(property);
@@ -61,39 +65,31 @@ function processFilter<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
       andOperands.push(eb(column, '=', sanitizedValue(value)));
     }
   }
-
-  return andOperands;
 }
 
-
 /**
- * Returns an array of OperandExpressions for a single filter and a tags filter.
- * Each property within filters are evaluated as an AND operand,
- * if a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
- * This way each Filter has to be a complete match, but the collection of filters can be evaluated as chosen.
+ * Processes each property in the tags filter as an AND operand and adds it to the `andOperands` array.
+ * If a property has an array of values it will treat it as a OneOf (IN) within the overall AND query.
  *
  * @param eb The ExpressionBuilder from the query.
- * @param filter The filter to be evaluated.
+ * @param andOperands The array of AND operands to append to.
  * @param tag The tags filter to be evaluated.
  * @returns An a single OperandExpression that represents an AND operation for all of the individual filters to be used by the caller.
  */
-function processFilterWithTag<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
+function processTags<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
-  filter: Filter,
-  tag: Filter,
-):OperandExpression<SqlBool> {
+  andOperands: OperandExpression<SqlBool>[],
+  tags: Filter
+): void {
 
   const tagColumn = new DynamicModule().ref('tag');
   const valueNumber = new DynamicModule().ref('valueNumber');
   const valueString = new DynamicModule().ref('valueString');
 
-  // process the regular filters
-  const andOperands = processFilter(eb, filter);
-
   // process each tag and add it to the andOperands from the rest of the filters
-  for (let property in tag) {
+  for (let property in tags) {
     andOperands.push(eb(tagColumn, '=', property));
-    const value = tag[property];
+    const value = tags[property];
     if (Array.isArray(value)) { // OneOfFilter
       if (value.some(val => typeof val === 'number')) {
         andOperands.push(eb(valueNumber, 'in', value));
@@ -137,7 +133,4 @@ function processFilterWithTag<DB = DwnDatabaseType, TB extends keyof DB = keyof 
       }
     }
   }
-
-  // evaluate the the collected operands as an AND operation.
-  return eb.and(andOperands);
 }
