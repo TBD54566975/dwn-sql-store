@@ -51,7 +51,10 @@ export function sanitizedValue(value: string | number | boolean): string | numbe
   }
 }
 
-export function extractTagsAndSanitizeFilters(filters: Filter[]): {
+/**
+ * Sanitizes the filters and separates tags from non-tags filter.
+ */
+export function sanitizeFiltersAndSeparateTags(filters: Filter[]): {
   tags: Filter;
   filter: Filter;
 }[] {
@@ -64,12 +67,12 @@ export function extractTagsAndSanitizeFilters(filters: Filter[]): {
 
     // tag values are prefixed with 'tag.', we extract them to be queried separately in the tags tables.
     for (let key in filter) {
-      const value = filter[key];
+      const value = sanitizeFilterValue(filter[key]);
 
       if (key.startsWith('tag.')) {
-        tagFilter[key.slice(4)] = sanitizeFilterValue(value);
+        tagFilter[key.slice(4)] = value;
       } else {
-        nonTagFilter[key] = sanitizeFilterValue(value);
+        nonTagFilter[key] = value;
       }
     }
 

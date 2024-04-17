@@ -1,6 +1,6 @@
 import { Filter } from '@tbd54566975/dwn-sdk-js';
 import { DynamicModule, ExpressionBuilder, OperandExpression, SelectQueryBuilder, SqlBool } from 'kysely';
-import { extractTagsAndSanitizeFilters, sanitizedValue } from './sanitize.js';
+import { sanitizeFiltersAndSeparateTags, sanitizedValue } from './sanitize.js';
 import { DwnDatabaseType } from '../types.js';
 
 /**
@@ -15,16 +15,17 @@ export function filterSelectQuery<DB = DwnDatabaseType, TB extends keyof DB = ke
   filters: Filter[],
   query: SelectQueryBuilder<DB, TB, O>
 ): SelectQueryBuilder<DB, TB, O> {
-  const sanitizedFilters = extractTagsAndSanitizeFilters(filters);
+  const sanitizedFilters = sanitizeFiltersAndSeparateTags(filters);
 
   return query.where((eb) =>
+    // evaluate the filters as an OR expression.
     eb.or(sanitizedFilters.map(({ filter, tags }) => {
+      // evaluate each filter + tags tuple as an AND expression.
       const andOperands: OperandExpression<SqlBool>[] = [];
 
       processFilter(eb, andOperands, filter);
       processTags(eb, andOperands, tags);
 
-      // evaluate the the collected operands as an AND operation.
       return eb.and(andOperands);
     }))
   );
@@ -74,7 +75,6 @@ function processFilter<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
  * @param eb The ExpressionBuilder from the query.
  * @param andOperands The array of AND operands to append to.
  * @param tag The tags filter to be evaluated.
- * @returns An a single OperandExpression that represents an AND operation for all of the individual filters to be used by the caller.
  */
 function processTags<DB = DwnDatabaseType, TB extends keyof DB = keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
