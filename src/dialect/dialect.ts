@@ -33,15 +33,10 @@ export interface Dialect extends KyselyDialect {
    * @param builder the CreateTableBuilder to add the column to.
    * @param tableName the name of the table to add the column to.
    * @param columnName the name of the column to add.
-   * @param targetType the type of the column to add.
+   * @param columnType the type of the column to add.
    * @param referenceTable the foreign table to reference.
    * @param referenceColumnName the foreign column to reference.
    * @param onDeleteAction the action to take when the referenced row is deleted.
-   *
-   * The ForeignKey name it creates in `mysql` will be in the following format:
-   * `${referenceTable}_${referenceColumnName}__${tableName}_${columnName}`
-   * ex: if the reference table is `users` and the reference column is `id` and the table is `profiles` and the column is `userId`,
-   * the resulting name for the foreign key is: `users_id__profiles_userId`
    *
    * @returns {CreateTableBuilder} the CreateTableBuilder with the added column.
    */

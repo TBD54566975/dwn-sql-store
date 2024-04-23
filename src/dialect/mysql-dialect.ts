@@ -38,6 +38,12 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
     return builder.addColumn(columnName, 'blob', callback);
   }
 
+  /**
+   * In MySQL, the ForeignKey name it creates in `mysql` will be in the following format:
+   * `${referenceTable}_${referenceColumnName}__${tableName}_${columnName}`
+   * ex: if the reference table is `users` and the reference column is `id` and the table is `profiles` and the column is `userId`,
+   * the resulting name for the foreign key is: `users_id__profiles_userId`
+   */
   addReferencedColumn<TB extends string>(
     builder: CreateTableBuilder<TB & string>,
     tableName: TB,

@@ -17,7 +17,7 @@ export class TagTables {
   constructor(private dialect: Dialect, private table: 'messageStore' | 'eventLog'){}
 
   /**
-   * Inserts the given tag and value associates to the foreign column's  `insertId` it is associated with.
+   * Inserts the given tags associated with the given foreign `insertId`.
    */
   async executeTagsInsert(
     foreignInsertId: number,
