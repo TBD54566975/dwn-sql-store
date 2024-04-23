@@ -80,12 +80,7 @@ export class MessageStoreSql implements MessageStore {
     let createRecordsTagsTable = this.#db.schema
       .createTable('messageStoreRecordsTags')
       .ifNotExists()
-      .addColumn('tag', 'text', (col) => col.notNull());
-
-
-    let createRecordsTagValuesTable = this.#db.schema
-      .createTable('messageStoreRecordsTagValues')
-      .ifNotExists()
+      .addColumn('tag', 'text', (col) => col.notNull())
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
 
@@ -94,11 +89,9 @@ export class MessageStoreSql implements MessageStore {
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStore', 'id', 'cascade');
-    createRecordsTagValuesTable = this.#dialect.addReferencedColumn(createRecordsTagValuesTable, 'messageStoreRecordsTagValues', 'tagId', 'integer', 'messageStoreRecordsTags', 'id', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
-    await createRecordsTagValuesTable.execute();
   }
 
   async close(): Promise<void> {
@@ -240,7 +233,6 @@ export class MessageStoreSql implements MessageStore {
     let query = this.#db
       .selectFrom('messageStore')
       .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageInsertId', 'messageStore.id')
-      .leftJoin('messageStoreRecordsTagValues', 'messageStoreRecordsTagValues.tagId', 'messageStoreRecordsTags.id')
       .select('messageCid')
       .distinct()
       .select([

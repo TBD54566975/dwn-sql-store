@@ -63,23 +63,16 @@ export class EventLogSql implements EventLog {
     let createRecordsTagsTable = this.#db.schema
       .createTable('eventLogRecordsTags')
       .ifNotExists()
-      .addColumn('tag', 'text', (col) => col.notNull());
-
-    let createRecordsTagValuesTable = this.#db.schema
-      .createTable('eventLogRecordsTagValues')
-      .ifNotExists()
+      .addColumn('tag', 'text', (col) => col.notNull())
       .addColumn('valueString', 'text')
       .addColumn('valueNumber', 'integer');
-
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'eventLogRecordsTags', 'eventLogWatermark', 'integer', 'eventLog', 'watermark', 'cascade');
-    createRecordsTagValuesTable = this.#dialect.addReferencedColumn(createRecordsTagValuesTable, 'eventLogRecordsTagValues', 'tagId', 'integer', 'eventLogRecordsTags', 'id', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
-    await createRecordsTagValuesTable.execute();
   }
 
   async close(): Promise<void> {
@@ -160,7 +153,6 @@ export class EventLogSql implements EventLog {
     let query = this.#db
       .selectFrom('eventLog')
       .leftJoin('eventLogRecordsTags', 'eventLogRecordsTags.eventLogWatermark', 'eventLog.watermark')
-      .leftJoin('eventLogRecordsTagValues', 'eventLogRecordsTagValues.tagId', 'eventLogRecordsTags.id')
       .select('messageCid')
       .distinct()
       .select('watermark')

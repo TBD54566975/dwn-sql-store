@@ -81,10 +81,6 @@ type MessageStoreRecordsTagsTable = {
   id: Generated<number>;
   tag: string;
   messageInsertId: number;
-};
-
-type MessageStoreRecordsTagValuesTable = {
-  tagId: number;
   valueString: string | null;
   valueNumber: number | null;
 };
@@ -93,10 +89,6 @@ type EventLogRecordsTagsTable = {
   id: Generated<number>;
   tag: string;
   eventLogWatermark: number;
-};
-
-type EventLogRecordsTagValuesTable = {
-  tagId: number;
   valueString: string | null;
   valueNumber: number | null;
 };
@@ -112,9 +104,7 @@ type DataStoreTable = {
 export type DwnDatabaseType = {
   eventLog: EventLogTable;
   eventLogRecordsTags: EventLogRecordsTagsTable;
-  eventLogRecordsTagValues: EventLogRecordsTagValuesTable;
   messageStore: MessageStoreTable;
   messageStoreRecordsTags: MessageStoreRecordsTagsTable;
-  messageStoreRecordsTagValues: MessageStoreRecordsTagValuesTable;
   dataStore: DataStoreTable;
 }

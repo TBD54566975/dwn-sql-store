@@ -25,37 +25,22 @@ export class TagTables {
     tx: Transaction<DwnDatabaseType>,
   ):Promise<void> {
     const tagTable = this.table === 'messageStore' ? 'messageStoreRecordsTags' : 'eventLogRecordsTags';
-    const tagValue = tagTable === 'messageStoreRecordsTags' ? { messageInsertId: foreignInsertId } : { eventLogWatermark: foreignInsertId };
+    const foreignKeyReference = tagTable === 'messageStoreRecordsTags' ? { messageInsertId: foreignInsertId } : { eventLogWatermark: foreignInsertId };
 
     for (const tag in tags) {
-      const { insertId } = await this.dialect.insertThenReturnId(tx, tagTable, { ...tagValue, tag }, 'id as insertId').executeTakeFirstOrThrow();
-      const tagId = Number(insertId);
       const tagValues = tags[tag];
       const values = Array.isArray(tagValues) ? tagValues : [ tagValues ];
-      await this.insertTagValues(tagId, values, tx);
+
+      for(const value of values) {
+        const tagInsertValue = sanitizedValue(value);
+        const insertValues = {
+          tag,
+          valueNumber : typeof tagInsertValue === 'number' ? tagInsertValue : null,
+          valueString : typeof tagInsertValue === 'string' ? tagInsertValue : null,
+          ...foreignKeyReference,
+        };
+        await this.dialect.insertThenReturnId(tx, tagTable, insertValues, 'id as insertId').executeTakeFirstOrThrow();
+      }
     }
-  }
-
-  /**
-   * Inserts the tag values for a given tag id.
-   */
-  private async insertTagValues(
-    tagId: number,
-    values: Array<string | number | boolean>,
-    tx: Transaction<DwnDatabaseType>,
-  ): Promise<void> {
-    const tagValueTable = this.table === 'messageStore' ? 'messageStoreRecordsTagValues' : 'eventLogRecordsTagValues';
-
-    const formatValue = (value: string | number | boolean) =>  {
-      const insertValue = sanitizedValue(value);
-      return {
-        tagId,
-        valueNumber : typeof insertValue === 'number' ? insertValue : null,
-        valueString : typeof insertValue === 'string' ? insertValue : null,
-      };
-    };
-
-    const insertValues = values.map(formatValue);
-    await tx.insertInto(tagValueTable).values(insertValues).execute();
   }
 }
