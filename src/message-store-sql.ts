@@ -30,7 +30,7 @@ export class MessageStoreSql implements MessageStore {
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
-    this.#tags = new TagTables(dialect, 'messageStore');
+    this.#tags = new TagTables(dialect, 'messageStoreMessages');
   }
 
   async open(): Promise<void> {
@@ -40,7 +40,7 @@ export class MessageStoreSql implements MessageStore {
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
     let createTable = this.#db.schema
-      .createTable('messageStore')
+      .createTable('messageStoreMessages')
       .ifNotExists()
       .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
@@ -88,7 +88,7 @@ export class MessageStoreSql implements MessageStore {
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
-    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStore', 'id', 'cascade');
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStoreMessages', 'id', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
@@ -171,7 +171,7 @@ export class MessageStoreSql implements MessageStore {
 
       // we use the dialect-specific `insertThenReturnId` in order to be able to extract the `insertId`
       const result = await this.#dialect
-        .insertThenReturnId(tx, 'messageStore', messageIndexValues, 'id as insertId')
+        .insertThenReturnId(tx, 'messageStoreMessages', messageIndexValues, 'id as insertId')
         .executeTakeFirstOrThrow();
 
       // if tags exist, we execute those within the transaction associating them with the `insertId`.
@@ -197,7 +197,7 @@ export class MessageStoreSql implements MessageStore {
 
     const result = await executeUnlessAborted(
       this.#db
-        .selectFrom('messageStore')
+        .selectFrom('messageStoreMessages')
         .selectAll()
         .where('tenant', '=', tenant)
         .where('messageCid', '=', cid)
@@ -231,8 +231,8 @@ export class MessageStoreSql implements MessageStore {
     const { property: sortProperty, direction: sortDirection } = this.extractSortProperties(messageSort);
 
     let query = this.#db
-      .selectFrom('messageStore')
-      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageInsertId', 'messageStore.id')
+      .selectFrom('messageStoreMessages')
+      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageInsertId', 'messageStoreMessages.id')
       .select('messageCid')
       .distinct()
       .select([
@@ -294,7 +294,7 @@ export class MessageStoreSql implements MessageStore {
 
     await executeUnlessAborted(
       this.#db
-        .deleteFrom('messageStore')
+        .deleteFrom('messageStoreMessages')
         .where('tenant', '=', tenant)
         .where('messageCid', '=', cid)
         .execute(),
@@ -310,7 +310,7 @@ export class MessageStoreSql implements MessageStore {
     }
 
     await this.#db
-      .deleteFrom('messageStore')
+      .deleteFrom('messageStoreMessages')
       .execute();
   }
 

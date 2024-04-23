@@ -14,7 +14,7 @@ export class EventLogSql implements EventLog {
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
-    this.#tags = new TagTables(dialect, 'eventLog');
+    this.#tags = new TagTables(dialect, 'eventLogMessages');
   }
 
   async open(): Promise<void> {
@@ -24,7 +24,7 @@ export class EventLogSql implements EventLog {
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
     let createTable = this.#db.schema
-      .createTable('eventLog')
+      .createTable('eventLogMessages')
       .ifNotExists()
       .addColumn('tenant', 'text', (col) => col.notNull())
       .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
@@ -69,7 +69,7 @@ export class EventLogSql implements EventLog {
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
-    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'eventLogRecordsTags', 'eventLogWatermark', 'integer', 'eventLog', 'watermark', 'cascade');
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'eventLogRecordsTags', 'eventWatermark', 'integer', 'eventLogMessages', 'watermark', 'cascade');
 
     await createTable.execute();
     await createRecordsTagsTable.execute();
@@ -120,7 +120,7 @@ export class EventLogSql implements EventLog {
 
       // we use the dialect-specific `insertThenReturnId` in order to be able to extract the `insertId`
       const result = await this.#dialect
-        .insertThenReturnId(tx, 'eventLog', eventIndexValues, 'watermark as insertId')
+        .insertThenReturnId(tx, 'eventLogMessages', eventIndexValues, 'watermark as insertId')
         .executeTakeFirstOrThrow();
 
       // if tags exist, we execute those within the transaction associating them with the `insertId`.
@@ -151,8 +151,8 @@ export class EventLogSql implements EventLog {
     }
 
     let query = this.#db
-      .selectFrom('eventLog')
-      .leftJoin('eventLogRecordsTags', 'eventLogRecordsTags.eventLogWatermark', 'eventLog.watermark')
+      .selectFrom('eventLogMessages')
+      .leftJoin('eventLogRecordsTags', 'eventLogRecordsTags.eventWatermark', 'eventLogMessages.watermark')
       .select('messageCid')
       .distinct()
       .select('watermark')
@@ -164,7 +164,7 @@ export class EventLogSql implements EventLog {
     }
 
     if(cursor !== undefined) {
-      // eventLog in the sql store uses the watermark cursor value which is a number in SQL
+      // eventLogMessages in the sql store uses the watermark cursor value which is a number in SQL
       // if not we will return empty results
       const cursorValue = cursor.value as number;
       const cursorMessageCid = cursor.messageCid;
@@ -211,7 +211,7 @@ export class EventLogSql implements EventLog {
     }
 
     await this.#db
-      .deleteFrom('eventLog')
+      .deleteFrom('eventLogMessages')
       .where('tenant', '=', tenant)
       .where('messageCid', 'in', messageCids)
       .execute();
@@ -225,7 +225,7 @@ export class EventLogSql implements EventLog {
     }
 
     await this.#db
-      .deleteFrom('eventLog')
+      .deleteFrom('eventLogMessages')
       .execute();
   }
 }
