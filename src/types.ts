@@ -80,7 +80,7 @@ type MessageStoreTable = {
 type MessageStoreRecordsTagsTable = {
   id: Generated<number>;
   tag: string;
-  messageStoreId: number;
+  messageInsertId: number;
 };
 
 type MessageStoreRecordsTagValuesTable = {

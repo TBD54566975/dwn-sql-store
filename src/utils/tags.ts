@@ -17,18 +17,18 @@ export class TagTables {
   constructor(private dialect: Dialect, private table: 'messageStore' | 'eventLog'){}
 
   /**
-   * Inserts the given tag and value associates to the parent Id.
+   * Inserts the given tag and value associates to the foreign column's  `insertId` it is associated with.
    */
   async executeTagsInsert(
-    id: number,
+    foreignInsertId: number,
     tags: KeyValues,
     tx: Transaction<DwnDatabaseType>,
   ):Promise<void> {
     const tagTable = this.table === 'messageStore' ? 'messageStoreRecordsTags' : 'eventLogRecordsTags';
-    const tagValue = tagTable === 'messageStoreRecordsTags' ? { messageStoreId: id } : { eventLogWatermark: id };
+    const tagValue = tagTable === 'messageStoreRecordsTags' ? { messageInsertId: foreignInsertId } : { eventLogWatermark: foreignInsertId };
 
     for (const tag in tags) {
-      const { insertId } = await this.dialect.insertIntoReturning(tx, tagTable, { ...tagValue, tag }, 'id as insertId').executeTakeFirstOrThrow();
+      const { insertId } = await this.dialect.insertThenReturnId(tx, tagTable, { ...tagValue, tag }, 'id as insertId').executeTakeFirstOrThrow();
       const tagId = Number(insertId);
       const tagValues = tags[tag];
       const values = Array.isArray(tagValues) ? tagValues : [ tagValues ];

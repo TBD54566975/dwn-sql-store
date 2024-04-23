@@ -42,15 +42,15 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
     builder: CreateTableBuilder<TB & string>,
     tableName: TB,
     columnName: string,
-    targetType: ColumnDataType,
+    columnType: ColumnDataType,
     referenceTable: string,
     referenceColumnName: string,
     onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
   ): CreateTableBuilder<TB & string> {
     return builder
-      .addColumn(columnName, targetType, (col) => col.notNull())
+      .addColumn(columnName, columnType, (col) => col.notNull())
       .addForeignKeyConstraint(
-        `${referenceTable}${referenceColumnName}_${tableName}${columnName}`,
+        `${referenceTable}_${referenceColumnName}__${tableName}_${columnName}`,
         [columnName],
         referenceTable,
         [referenceColumnName],
@@ -58,7 +58,7 @@ export class MysqlDialect extends KyselyMysqlDialect implements Dialect {
       );
   }
 
-  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = AnyColumn<DB, TB>>(
+  insertThenReturnId<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = AnyColumn<DB, TB>>(
     db: Transaction<DB> | Kysely<DB>,
     table: TB & string,
     values: InsertObject<DB, TB & string>,

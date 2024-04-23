@@ -93,7 +93,7 @@ export class MessageStoreSql implements MessageStore {
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
-    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageStoreId', 'integer', 'messageStore', 'id', 'cascade');
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStore', 'id', 'cascade');
     createRecordsTagValuesTable = this.#dialect.addReferencedColumn(createRecordsTagValuesTable, 'messageStoreRecordsTagValues', 'tagId', 'integer', 'messageStoreRecordsTags', 'id', 'cascade');
 
     await createTable.execute();
@@ -176,9 +176,9 @@ export class MessageStoreSql implements MessageStore {
         ...putIndexes
       };
 
-      // we use the dialect-specific `insertIntoReturning` in order to be able to extract the `insertId`
+      // we use the dialect-specific `insertThenReturnId` in order to be able to extract the `insertId`
       const result = await this.#dialect
-        .insertIntoReturning(tx, 'messageStore', messageIndexValues, 'id as insertId')
+        .insertThenReturnId(tx, 'messageStore', messageIndexValues, 'id as insertId')
         .executeTakeFirstOrThrow();
 
       // if tags exist, we execute those within the transaction associating them with the `insertId`.
@@ -239,7 +239,7 @@ export class MessageStoreSql implements MessageStore {
 
     let query = this.#db
       .selectFrom('messageStore')
-      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageStoreId', 'messageStore.id')
+      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageInsertId', 'messageStore.id')
       .leftJoin('messageStoreRecordsTagValues', 'messageStoreRecordsTagValues.tagId', 'messageStoreRecordsTags.id')
       .select('messageCid')
       .distinct()

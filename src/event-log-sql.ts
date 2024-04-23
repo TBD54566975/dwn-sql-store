@@ -125,9 +125,9 @@ export class EventLogSql implements EventLog {
         ...appendIndexes,
       };
 
-      // we use the dialect-specific `insertIntoReturning` in order to be able to extract the `insertId`
+      // we use the dialect-specific `insertThenReturnId` in order to be able to extract the `insertId`
       const result = await this.#dialect
-        .insertIntoReturning(tx, 'eventLog', eventIndexValues, 'watermark as insertId')
+        .insertThenReturnId(tx, 'eventLog', eventIndexValues, 'watermark as insertId')
         .executeTakeFirstOrThrow();
 
       // if tags exist, we execute those within the transaction associating them with the `insertId`.

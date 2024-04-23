@@ -39,9 +39,9 @@ export interface Dialect extends KyselyDialect {
    * @param onDeleteAction the action to take when the referenced row is deleted.
    *
    * The ForeignKey name it creates in `mysql` will be in the following format:
-   * `${referenceTable}${referenceColumnName}_${tableName}${columnName}`
+   * `${referenceTable}_${referenceColumnName}__${tableName}_${columnName}`
    * ex: if the reference table is `users` and the reference column is `id` and the table is `profiles` and the column is `userId`,
-   * the resulting name for the foreign key is: `usersid_profilesuserId`
+   * the resulting name for the foreign key is: `users_id__profiles_userId`
    *
    * @returns {CreateTableBuilder} the CreateTableBuilder with the added column.
    */
@@ -49,17 +49,15 @@ export interface Dialect extends KyselyDialect {
     builder: CreateTableBuilder<TB & string>,
     tableName: TB,
     columnName: string,
-    targetType: ColumnDataType,
+    columnType: ColumnDataType,
     referenceTable: string,
     referenceColumnName: string,
     onDeleteAction: 'cascade' | 'no action' | 'restrict' | 'set null' | 'set default',
   ): CreateTableBuilder<TB & string>;
 
   /**
-   * This is a helper method to return an `insertId` for each dialect.
-   * We need this method because Postgres does not return an `insertId` with insert an insert.
-   *
-   * Since `returning` is supported on both `sqlite` and `postgres`, it will be used on those and ignored on `mysql`.
+   * This is a helper method to return an `insertId` across all dialects after inserting values.
+   * `postgres` and `sqlite` both support the `returning` clause, however `mysql` does not and instead returns the last inserted id.
    *
    * @param db the Kysely DB object or a DB Transaction.
    * @param table the table to insert into.
@@ -72,7 +70,7 @@ export interface Dialect extends KyselyDialect {
    *
    * @returns {InsertQueryBuilder} object to further modify the query or execute it.
    */
-  insertIntoReturning<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
+  insertThenReturnId<DB, TB extends keyof DB = keyof DB, SE extends SelectExpression<DB, TB & string> = any>(
     db: Transaction<DB> | Kysely<DB>,
     table: TB & string,
     values: InsertObject<DB, TB & string>,
