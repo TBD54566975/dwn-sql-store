@@ -9,24 +9,28 @@ import {
   MessageSort,
   Pagination,
   SortDirection,
-  PaginationCursor
+  PaginationCursor,
 } from '@tbd54566975/dwn-sdk-js';
-import { Kysely } from 'kysely';
-import { DwnDatabaseType } from './types.js';
+
+import { Kysely, Transaction } from 'kysely';
+import { DwnDatabaseType, KeyValues } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
 import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
-import { sanitizeFilters, sanitizeIndexes } from './utils/sanitize.js';
+import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
+import { TagTables } from './utils/tags.js';
 
 
 export class MessageStoreSql implements MessageStore {
   #dialect: Dialect;
+  #tags: TagTables;
   #db: Kysely<DwnDatabaseType> | null = null;
 
   constructor(dialect: Dialect) {
     this.#dialect = dialect;
+    this.#tags = new TagTables(dialect, 'messageStoreMessages');
   }
 
   async open(): Promise<void> {
@@ -36,9 +40,9 @@ export class MessageStoreSql implements MessageStore {
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
     let createTable = this.#db.schema
-      .createTable('messageStore')
+      .createTable('messageStoreMessages')
       .ifNotExists()
-      .addColumn('tenant', 'text', (col) => col.notNull())
+      .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
       .addColumn('encodedData', 'text') // we optionally store encoded data if it is below a threshold
       // "indexes" start
@@ -54,7 +58,7 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('isLatestBaseState', 'text')
       .addColumn('published', 'text')
       .addColumn('author', 'text')
-      .addColumn('recordId', 'text')
+      .addColumn('recordId', 'varchar(60)')
       .addColumn('entryId', 'text')
       .addColumn('datePublished', 'text')
       .addColumn('latest', 'text')
@@ -73,11 +77,21 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('permissionsGrantId', 'text');
       // "indexes" end
 
+    let createRecordsTagsTable = this.#db.schema
+      .createTable('messageStoreRecordsTags')
+      .ifNotExists()
+      .addColumn('tag', 'text', (col) => col.notNull())
+      .addColumn('valueString', 'text')
+      .addColumn('valueNumber', 'integer');
+
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
     createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
+    createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
+    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStoreMessages', 'id', 'cascade');
 
     await createTable.execute();
+    await createRecordsTagsTable.execute();
   }
 
   async close(): Promise<void> {
@@ -88,7 +102,7 @@ export class MessageStoreSql implements MessageStore {
   async put(
     tenant: string,
     message: GenericMessage,
-    indexes: Record<string, string | boolean | number>,
+    indexes: KeyValues,
     options?: MessageStoreOptions
   ): Promise<void> {
     if (!this.#db) {
@@ -98,7 +112,6 @@ export class MessageStoreSql implements MessageStore {
     }
 
     options?.signal?.throwIfAborted();
-    const putIndexes = { ...indexes };
 
     // gets the encoded data and removes it from the message
     // we remove it from the message as it would cause the `encodedMessageBytes` to be greater than the
@@ -124,22 +137,49 @@ export class MessageStoreSql implements MessageStore {
 
     const messageCid = encodedMessageBlock.cid.toString();
     const encodedMessageBytes = Buffer.from(encodedMessageBlock.bytes);
-    sanitizeIndexes(putIndexes);
 
+    // we execute the insert in a transaction as we are making multiple inserts into multiple tables.
+    // if any of these inserts would throw, the whole transaction would be rolled back.
+    // otherwise it is committed.
+    await this.#db.transaction().execute(this.executePutTransaction({
+      tenant, messageCid, encodedMessageBytes, encodedData, indexes
+    }));
+  }
 
-    await executeUnlessAborted(
-      this.#db
-        .insertInto('messageStore')
-        .values({
-          tenant,
-          messageCid,
-          encodedMessageBytes,
-          encodedData,
-          ...putIndexes
-        })
-        .execute(),
-      options?.signal
-    );
+  private executePutTransaction(queryOptions: {
+    tenant: string;
+    messageCid: string;
+    encodedMessageBytes: Buffer;
+    encodedData: string | null;
+    indexes: KeyValues;
+  }): (tx: Transaction<DwnDatabaseType>) => Promise<void> {
+    const { tenant, messageCid, encodedMessageBytes, encodedData, indexes } = queryOptions;
+
+    // we extract the tag indexes into their own object to be inserted separately.
+    // we also sanitize the indexes to convert any `boolean` values to `text` representations.
+    const { indexes: putIndexes, tags } = extractTagsAndSanitizeIndexes(indexes);
+
+    return async (tx) => {
+
+      const messageIndexValues = {
+        tenant,
+        messageCid,
+        encodedMessageBytes,
+        encodedData,
+        ...putIndexes
+      };
+
+      // we use the dialect-specific `insertThenReturnId` in order to be able to extract the `insertId`
+      const result = await this.#dialect
+        .insertThenReturnId(tx, 'messageStoreMessages', messageIndexValues, 'id as insertId')
+        .executeTakeFirstOrThrow();
+
+      // if tags exist, we execute those within the transaction associating them with the `insertId`.
+      if (Object.keys(tags).length > 0) {
+        await this.#tags.executeTagsInsert(result.insertId, tags, tx);
+      }
+
+    };
   }
 
   async get(
@@ -157,7 +197,7 @@ export class MessageStoreSql implements MessageStore {
 
     const result = await executeUnlessAborted(
       this.#db
-        .selectFrom('messageStore')
+        .selectFrom('messageStoreMessages')
         .selectAll()
         .where('tenant', '=', tenant)
         .where('messageCid', '=', cid)
@@ -187,19 +227,23 @@ export class MessageStoreSql implements MessageStore {
 
     options?.signal?.throwIfAborted();
 
-    let query = this.#db
-      .selectFrom('messageStore')
-      .selectAll()
-      .where('tenant', '=', tenant);
-
-    // sqlite3 dialect does not support `boolean` types, so we convert the filter to match our index
-    sanitizeFilters(filters);
-
-    // add filters to query
-    query = filterSelectQuery(filters, query);
-
     // extract sort property and direction from the supplied messageSort
     const { property: sortProperty, direction: sortDirection } = this.extractSortProperties(messageSort);
+
+    let query = this.#db
+      .selectFrom('messageStoreMessages')
+      .leftJoin('messageStoreRecordsTags', 'messageStoreRecordsTags.messageInsertId', 'messageStoreMessages.id')
+      .select('messageCid')
+      .distinct()
+      .select([
+        'encodedMessageBytes',
+        'encodedData',
+        sortProperty,
+      ])
+      .where('tenant', '=', tenant);
+
+    // filter sanitization takes place within `filterSelectQuery`
+    query = filterSelectQuery(filters, query);
 
     if(pagination?.cursor !== undefined) {
       // currently the sort property is explicitly either `dateCreated` | `messageTimestamp` | `datePublished` which are all strings
@@ -250,7 +294,7 @@ export class MessageStoreSql implements MessageStore {
 
     await executeUnlessAborted(
       this.#db
-        .deleteFrom('messageStore')
+        .deleteFrom('messageStoreMessages')
         .where('tenant', '=', tenant)
         .where('messageCid', '=', cid)
         .execute(),
@@ -266,7 +310,7 @@ export class MessageStoreSql implements MessageStore {
     }
 
     await this.#db
-      .deleteFrom('messageStore')
+      .deleteFrom('messageStoreMessages')
       .execute();
   }
 
