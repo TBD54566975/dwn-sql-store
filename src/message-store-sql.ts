@@ -74,7 +74,7 @@ export class MessageStoreSql implements MessageStore {
       .addColumn('recipient', 'text')
       .addColumn('contextId', 'text')
       .addColumn('parentId', 'text')
-      .addColumn('permissionsGrantId', 'text');
+      .addColumn('permissionGrantId', 'text');
       // "indexes" end
 
     let createRecordsTagsTable = this.#db.schema
@@ -82,7 +82,7 @@ export class MessageStoreSql implements MessageStore {
       .ifNotExists()
       .addColumn('tag', 'text', (col) => col.notNull())
       .addColumn('valueString', 'text')
-      .addColumn('valueNumber', 'integer');
+      .addColumn('valueNumber', 'decimal');
 
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
