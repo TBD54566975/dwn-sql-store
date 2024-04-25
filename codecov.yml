@@ -9,3 +9,6 @@ coverage:
     patch:
       default:
         informational: true # Don't gate PRs based on Codecov passing thresholds
+
+ignore:
+  - "src/types"
