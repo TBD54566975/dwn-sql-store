@@ -57,7 +57,7 @@ export class EventLogSql implements EventLog {
       .addColumn('recipient', 'text')
       .addColumn('contextId', 'text')
       .addColumn('parentId', 'text')
-      .addColumn('permissionsGrantId', 'text');
+      .addColumn('permissionGrantId', 'text');
       // "indexes" end
 
     let createRecordsTagsTable = this.#db.schema
@@ -65,7 +65,7 @@ export class EventLogSql implements EventLog {
       .ifNotExists()
       .addColumn('tag', 'text', (col) => col.notNull())
       .addColumn('valueString', 'text')
-      .addColumn('valueNumber', 'integer');
+      .addColumn('valueNumber', 'decimal');
     // Add columns that have dialect-specific constraints
     createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'watermark', (col) => col.primaryKey());
     createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
