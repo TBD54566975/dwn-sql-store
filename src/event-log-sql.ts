@@ -57,7 +57,8 @@ export class EventLogSql implements EventLog {
       .addColumn('recipient', 'text')
       .addColumn('contextId', 'text')
       .addColumn('parentId', 'text')
-      .addColumn('permissionGrantId', 'text');
+      .addColumn('permissionGrantId', 'text')
+      .addColumn('prune', 'text');
       // "indexes" end
 
     let createRecordsTagsTable = this.#db.schema

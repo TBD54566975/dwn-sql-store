@@ -36,6 +36,7 @@ type EventLogTable = {
   contextId: string | null;
   parentId: string | null;
   permissionGrantId: string | null;
+  prune: string | null;
   // "indexes" end
 }
 
@@ -74,6 +75,7 @@ type MessageStoreTable = {
   contextId: string | null;
   parentId: string | null;
   permissionGrantId: string | null;
+  prune: string | null;
   // "indexes" end
 }
 
