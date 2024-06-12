@@ -1,9 +1,10 @@
 import type { DwnDatabaseType, KeyValues } from './types.js';
-import type { EventLog, Filter, PaginationCursor } from '@tbd54566975/dwn-sdk-js';
+import { type EventLog, type Filter, type PaginationCursor } from '@tbd54566975/dwn-sdk-js';
 
 import { Dialect } from './dialect/dialect.js';
 import { filterSelectQuery } from './utils/filter.js';
 import { Kysely, Transaction } from 'kysely';
+import { executeWithRetryIfDatabaseIsLocked } from './utils/transaction.js';
 import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
 import { TagTables } from './utils/tags.js';
 
@@ -95,12 +96,14 @@ export class EventLogSql implements EventLog {
     // we execute the insert in a transaction as we are making multiple inserts into multiple tables.
     // if any of these inserts would throw, the whole transaction would be rolled back.
     // otherwise it is committed.
-    await this.#db.transaction().execute(this.executePutTransaction({
-      tenant, messageCid, indexes
-    }));
+    const putEventOperation = this.constructPutEventOperation({ tenant, messageCid, indexes });
+    await executeWithRetryIfDatabaseIsLocked(this.#db, putEventOperation);
   }
 
-  private executePutTransaction(queryOptions: {
+  /**
+   * Constructs a transactional operation to insert an event into the database.
+   */
+  private constructPutEventOperation(queryOptions: {
     tenant: string;
     messageCid: string;
     indexes: KeyValues;

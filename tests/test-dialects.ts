@@ -32,6 +32,10 @@ export const testSqliteDialect = new SqliteDialect({
     'dwn.sqlite',
     {
       fileMustExist: true,
+      // IMPORTANT: denotes how long to wait before attempting to execute a query when database is locked, and throws an error if it is still locked
+      // See https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#new-databasepath-options
+      // NOTE: this is also equivalent to setting the pragma "busy_timeout" directly: database.pragma('busy_timeout = 100');
+      timeout: 100 // 100ms
     }
   )
 });
