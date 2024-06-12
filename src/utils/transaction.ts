@@ -1,7 +1,5 @@
-import { Filter } from '@tbd54566975/dwn-sdk-js';
-import { DynamicModule, ExpressionBuilder, Kysely, OperandExpression, SelectQueryBuilder, SqlBool, Transaction } from 'kysely';
-import { sanitizeFiltersAndSeparateTags, sanitizedValue } from './sanitize.js';
 import { DwnDatabaseType } from '../types.js';
+import { Kysely, Transaction } from 'kysely';
 
 /**
  * Executes the provided transactional operation with retry if the database is locked.
@@ -11,10 +9,11 @@ export async function executeWithRetryIfDatabaseIsLocked(
   operation: (transaction: Transaction<DwnDatabaseType>) => Promise<void>
 ): Promise<void>{
   let retryCount = 0;
-  while (true) {
+  let success = false;
+  while (!success) {
     try {
       await database.transaction().execute(operation);
-      break;
+      success = true;
     } catch (error) {
       // if error is "database is locked", we retry the transaction
       // this mainly happens when multiple transactions are trying to access the database at the same time in SQLite implementation.

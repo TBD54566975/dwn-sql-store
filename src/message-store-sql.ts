@@ -177,7 +177,7 @@ export class MessageStoreSql implements MessageStore {
       const result = await this.#dialect
         .insertThenReturnId(tx, 'messageStoreMessages', messageIndexValues, 'id as insertId')
         .executeTakeFirstOrThrow();
-        
+
       // if tags exist, we execute those within the transaction associating them with the `insertId`.
       if (Object.keys(tags).length > 0) {
         await this.#tags.executeTagsInsert(result.insertId, tags, tx);
