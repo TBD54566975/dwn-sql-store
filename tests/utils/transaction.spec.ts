@@ -1,9 +1,13 @@
-import { expect } from 'chai';
+import chai, { expect } from 'chai';
 import { testMysqlDialect, testPostgresDialect, testSqliteDialect } from '../test-dialects.js';
 
 import { executeWithRetryIfDatabaseIsLocked } from '../../src/utils/transaction.js';
 import { Kysely } from 'kysely';
 import { DwnDatabaseType } from '../../src/types.js';
+
+import chaiAsPromised from 'chai-as-promised';
+
+chai.use(chaiAsPromised);
 
 describe('executeWithRetryIfDatabaseIsLocked', () => {
   // There is an opportunity to improve how 3 different database dialects are tested if SQL specific tests start to expand.
@@ -15,11 +19,8 @@ describe('executeWithRetryIfDatabaseIsLocked', () => {
         throw new Error('Some error');
       };
 
-      try {
-        await executeWithRetryIfDatabaseIsLocked(database, operation);
-      } catch (error) {
-        expect(error.message).to.contain('Some error');
-      }
+      const executePromise = executeWithRetryIfDatabaseIsLocked(database, operation);
+      await expect(executePromise).to.be.rejectedWith('Some error');
     });
   }
 });
