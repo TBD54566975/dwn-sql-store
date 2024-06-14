@@ -1,8 +1,9 @@
-import { TestSuite } from '@tbd54566975/dwn-sdk-js/tests';
-import { testMysqlDialect, testPostgresDialect, testSqliteDialect } from './test-dialects.js';
-import { MessageStoreSql } from '../src/message-store-sql.js';
 import { DataStoreSql } from '../src/data-store-sql.js';
 import { EventLogSql } from '../src/event-log-sql.js';
+import { MessageStoreSql } from '../src/message-store-sql.js';
+import { ResumableTaskStoreSql } from '../src/resumable-task-store-sql.js';
+import { TestSuite } from '@tbd54566975/dwn-sdk-js/tests';
+import { testMysqlDialect, testPostgresDialect, testSqliteDialect } from './test-dialects.js';
 
 // Remove when we Node.js v18 is no longer supported by this project.
 // Node.js v18 maintenance begins 2023-10-18 and is EoL 2025-04-30: https://github.com/nodejs/release#release-schedule
@@ -13,25 +14,28 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 describe('SQL Store Test Suite', () => {
   describe('MysqlDialect Support', () => {
     TestSuite.runStoreDependentTests({
-      messageStore : new MessageStoreSql(testMysqlDialect),
-      dataStore    : new DataStoreSql(testMysqlDialect),
-      eventLog     : new EventLogSql(testMysqlDialect),
+      messageStore       : new MessageStoreSql(testMysqlDialect),
+      dataStore          : new DataStoreSql(testMysqlDialect),
+      eventLog           : new EventLogSql(testMysqlDialect),
+      resumableTaskStore : new ResumableTaskStoreSql(testSqliteDialect),
     });
   });
 
   describe('PostgresDialect Support', () => {
     TestSuite.runStoreDependentTests({
-      messageStore : new MessageStoreSql(testPostgresDialect),
-      dataStore    : new DataStoreSql(testPostgresDialect),
-      eventLog     : new EventLogSql(testPostgresDialect),
+      messageStore       : new MessageStoreSql(testPostgresDialect),
+      dataStore          : new DataStoreSql(testPostgresDialect),
+      eventLog           : new EventLogSql(testPostgresDialect),
+      resumableTaskStore : new ResumableTaskStoreSql(testSqliteDialect),
     });
   });
 
   describe('SqliteDialect Support', () => {
     TestSuite.runStoreDependentTests({
-      messageStore : new MessageStoreSql(testSqliteDialect),
-      dataStore    : new DataStoreSql(testSqliteDialect),
-      eventLog     : new EventLogSql(testSqliteDialect),
+      messageStore       : new MessageStoreSql(testSqliteDialect),
+      dataStore          : new DataStoreSql(testSqliteDialect),
+      eventLog           : new EventLogSql(testSqliteDialect),
+      resumableTaskStore : new ResumableTaskStoreSql(testSqliteDialect),
     });
   });
 });
