@@ -1,5 +1,6 @@
 import { DwnDatabaseType } from './types.js';
 import { Dialect } from './dialect/dialect.js';
+import { executeWithRetryIfDatabaseIsLocked } from './utils/transaction.js';
 import { Kysely } from 'kysely';
 import { Cid, ManagedResumableTask, ResumableTaskStore } from '@tbd54566975/dwn-sdk-js';
 
@@ -73,14 +74,12 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
 
     let tasks: DwnDatabaseType['resumableTasks'][] = [];
 
-    await this.#db.transaction().execute(async (transaction) => {
+    const operation = async (transaction) => {
       tasks = await transaction
         .selectFrom('resumableTasks')
         .selectAll()
         .where('timeout', '<=', now)
         .limit(count)
-        // .forUpdate()
-        // .skipLocked()
         .execute();
 
       if (tasks.length > 0) {
@@ -91,7 +90,9 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
           .where((eb) => eb('id', 'in', ids))
           .execute();
       }
-    });
+    };
+
+    await executeWithRetryIfDatabaseIsLocked(this.#db, operation);
 
     const tasksToReturn = tasks.map((task) => {
       return {
