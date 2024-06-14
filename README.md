@@ -154,8 +154,10 @@ Docker is used to spin up a local containerized DBs for testing purposes. Docker
 
 0. clone the repo and `cd` into the project directory
 1. Install all project dependencies by running `npm install`
-2. start the test databases using `./scripts/start-databases` (requires Docker)
-3. run tests using `npm run test`
+2. Start docker
+   > NOTE: You might need to delete the existing PostgreSQL and MySQL docker containers as well as `dwn.sqlite` file when a breaking change is introduced if you see tests that used to pass is now failing after a `git pull`.
+3. start the test databases using `./scripts/start-databases` (requires Docker)
+4. run tests using `npm run test`
 
 ## `npm` scripts
 

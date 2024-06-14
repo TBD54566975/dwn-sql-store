@@ -16,10 +16,11 @@ import { Kysely, Transaction } from 'kysely';
 import { DwnDatabaseType, KeyValues } from './types.js';
 import * as block from 'multiformats/block';
 import * as cbor from '@ipld/dag-cbor';
-import { sha256 } from 'multiformats/hashes/sha2';
 import { Dialect } from './dialect/dialect.js';
-import { filterSelectQuery } from './utils/filter.js';
+import { executeWithRetryIfDatabaseIsLocked } from './utils/transaction.js';
 import { extractTagsAndSanitizeIndexes } from './utils/sanitize.js';
+import { filterSelectQuery } from './utils/filter.js';
+import { sha256 } from 'multiformats/hashes/sha2';
 import { TagTables } from './utils/tags.js';
 
 
@@ -142,12 +143,14 @@ export class MessageStoreSql implements MessageStore {
     // we execute the insert in a transaction as we are making multiple inserts into multiple tables.
     // if any of these inserts would throw, the whole transaction would be rolled back.
     // otherwise it is committed.
-    await this.#db.transaction().execute(this.executePutTransaction({
-      tenant, messageCid, encodedMessageBytes, encodedData, indexes
-    }));
+    const putMessageOperation = this.constructPutMessageOperation({ tenant, messageCid, encodedMessageBytes, encodedData, indexes });
+    await executeWithRetryIfDatabaseIsLocked(this.#db, putMessageOperation);
   }
 
-  private executePutTransaction(queryOptions: {
+  /**
+   * Constructs the transactional operation to insert the given message into the database.
+   */
+  private constructPutMessageOperation(queryOptions: {
     tenant: string;
     messageCid: string;
     encodedMessageBytes: Buffer;
