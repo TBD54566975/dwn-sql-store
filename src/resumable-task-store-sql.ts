@@ -119,7 +119,6 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
   }
 
   async extend(taskId: string, timeoutInSeconds: number): Promise<void> {
-    console.log('extending task', taskId, timeoutInSeconds);
     if (!this.#db) {
       throw new Error('Connection to database not open. Call `open` before using `extend`.');
     }
