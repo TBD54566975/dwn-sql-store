@@ -155,7 +155,7 @@ Docker is used to spin up a local containerized DBs for testing purposes. Docker
 0. clone the repo and `cd` into the project directory
 1. Install all project dependencies by running `npm install`
 2. Start docker
-   > NOTE: You might need to delete the existing PostgreSQL and MySQL docker containers as well as `dwn.sqlite` file when a breaking change is introduced if you see tests that used to pass is now failing after a `git pull`.
+   > NOTE: You might need to delete the existing PostgreSQL and MySQL docker containers as well as `dwn.sqlite` file when a breaking change is introduced if you see tests that used to pass is now failing after a `git pull`. You can run `./scripts/delete-databases` to do this.
 3. start the test databases using `./scripts/start-databases` (requires Docker)
 4. run tests using `npm run test`
 
@@ -163,10 +163,10 @@ Docker is used to spin up a local containerized DBs for testing purposes. Docker
 
 | Script                  | Description                                 |
 | ----------------------- | ------------------------------------------- |
-| `npm run build:esm`    | compiles typescript into ESM JS                                    |
-| `npm run build:cjs`    | compiles typescript into CommonJS                                  |
-| `npm run build`        | compiles typescript into ESM JS & CommonJS                         |
-| `npm run clean`        | deletes compiled JS                                                |
+| `npm run build:cjs`     | compiles typescript into CommonJS           |
+| `npm run build:esm`     | compiles typescript into ESM JS             |
+| `npm run build`         | compiles typescript into ESM JS & CommonJS  |
+| `npm run clean`         | deletes compiled JS                         |
 | `npm run test`          | runs tests.                                 |
 | `npm run test-coverage` | runs tests and includes coverage            |
 | `npm run lint`          | runs linter                                 |

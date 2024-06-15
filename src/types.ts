@@ -103,10 +103,18 @@ type DataStoreTable = {
   data: Uint8Array;
 }
 
+type ResumableTaskTable = {
+  id: string;
+  task: string;
+  timeout: number;
+  retryCount: number;
+}
+
 export type DwnDatabaseType = {
   eventLogMessages: EventLogTable;
   eventLogRecordsTags: EventLogRecordsTagsTable;
   messageStoreMessages: MessageStoreTable;
   messageStoreRecordsTags: MessageStoreRecordsTagsTable;
   dataStore: DataStoreTable;
+  resumableTasks: ResumableTaskTable;
 }
