@@ -13,7 +13,7 @@ if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 describe('SQL Store Test Suite', () => {
   describe('MysqlDialect Support', () => {
-    TestSuite.runStoreDependentTests({
+    TestSuite.runInjectableDependentTests({
       messageStore       : new MessageStoreSql(testMysqlDialect),
       dataStore          : new DataStoreSql(testMysqlDialect),
       eventLog           : new EventLogSql(testMysqlDialect),
@@ -22,7 +22,7 @@ describe('SQL Store Test Suite', () => {
   });
 
   describe('PostgresDialect Support', () => {
-    TestSuite.runStoreDependentTests({
+    TestSuite.runInjectableDependentTests({
       messageStore       : new MessageStoreSql(testPostgresDialect),
       dataStore          : new DataStoreSql(testPostgresDialect),
       eventLog           : new EventLogSql(testPostgresDialect),
@@ -31,7 +31,7 @@ describe('SQL Store Test Suite', () => {
   });
 
   describe('SqliteDialect Support', () => {
-    TestSuite.runStoreDependentTests({
+    TestSuite.runInjectableDependentTests({
       messageStore       : new MessageStoreSql(testSqliteDialect),
       dataStore          : new DataStoreSql(testSqliteDialect),
       eventLog           : new EventLogSql(testSqliteDialect),
