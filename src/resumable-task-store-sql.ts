@@ -26,7 +26,7 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
       .ifNotExists()
       .addColumn('id', 'varchar(255)', (col) => col.primaryKey())
       .addColumn('task', 'text')
-      .addColumn('timeout', 'integer')
+      .addColumn('timeout', 'bigint')
       .addColumn('retryCount', 'integer');
 
     await table.execute();
@@ -111,11 +111,21 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
       throw new Error('Connection to database not open. Call `open` before using `read`.');
     }
 
-    return this.#db
+    const task = await this.#db
       .selectFrom('resumableTasks')
       .selectAll()
       .where('id', '=', taskId)
       .executeTakeFirst();
+
+    if (task !== undefined) {
+      // NOTE: special handling ONLY for PostgreSQL:
+      // Even though PostgreSQL stores `bigint` as a 64 bit number, the `pg` library we depend on returns it as a string, hence the conversion.
+      if (typeof task.timeout !== 'number') {
+        task.timeout = parseInt(task.timeout, 10);
+      }
+    }
+
+    return task;
   }
 
   async extend(taskId: string, timeoutInSeconds: number): Promise<void> {
