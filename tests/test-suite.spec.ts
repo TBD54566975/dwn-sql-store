@@ -17,7 +17,7 @@ describe('SQL Store Test Suite', () => {
       messageStore       : new MessageStoreSql(testMysqlDialect),
       dataStore          : new DataStoreSql(testMysqlDialect),
       eventLog           : new EventLogSql(testMysqlDialect),
-      resumableTaskStore : new ResumableTaskStoreSql(testSqliteDialect),
+      resumableTaskStore : new ResumableTaskStoreSql(testMysqlDialect),
     });
   });
 
@@ -26,7 +26,7 @@ describe('SQL Store Test Suite', () => {
       messageStore       : new MessageStoreSql(testPostgresDialect),
       dataStore          : new DataStoreSql(testPostgresDialect),
       eventLog           : new EventLogSql(testPostgresDialect),
-      resumableTaskStore : new ResumableTaskStoreSql(testSqliteDialect),
+      resumableTaskStore : new ResumableTaskStoreSql(testPostgresDialect),
     });
   });
 

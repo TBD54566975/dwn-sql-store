@@ -28,6 +28,9 @@ SQL backed implementations of DWN `MessageStore`, `DataStore`, and `EventLog`.
 * MySQL ✔️
 * PostgreSQL ✔️
 
+> NOTE:
+See [SQL Dialect Variations](sql-dialect-variations) for the list of special handling to support the above SQL variations.
+
 # Installation
 
 ```bash
@@ -171,3 +174,5 @@ Docker is used to spin up a local containerized DBs for testing purposes. Docker
 | `npm run test-coverage` | runs tests and includes coverage            |
 | `npm run lint`          | runs linter                                 |
 | `npm run lint:fix`      | runs linter and fixes auto-fixable problems |
+
+[codeowners-link]: https://github.com/TBD54566975/web5-js/blob/main/sql-dialect-variations.md
