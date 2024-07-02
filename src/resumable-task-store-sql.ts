@@ -21,9 +21,18 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
 
+    // if table already exists, there is no more things todo
+    const tableName = 'resumableTasks';
+    const tableExists = await this.#dialect.hasTable(this.#db, tableName);
+    if (tableExists) {
+      return;
+    }
+
+    // else create the table and corresponding indexes
+
     let table = this.#db.schema
-      .createTable('resumableTasks')
-      .ifNotExists()
+      .createTable(tableName)
+      .ifNotExists() // kept to show supported by all dialects in contrast to ifNotExists() below, though not needed due to hasTable() check above
       .addColumn('id', 'varchar(255)', (col) => col.primaryKey())
       .addColumn('task', 'text')
       .addColumn('timeout', 'bigint')
@@ -31,9 +40,9 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
 
     await table.execute();
 
-    this.#db.schema
+    await this.#db.schema
       .createIndex('index_timeout')
-      .ifNotExists()
+      // .ifNotExists() // intentionally kept commented out code to show that it is not supported by all dialects (ie. MySQL)
       .on('resumableTasks')
       .column('timeout')
       .execute();

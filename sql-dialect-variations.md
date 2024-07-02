@@ -8,6 +8,7 @@ We use `Kysely` to help us abstract differences between SQL variants in this cod
 
 - When inserting values into a table, the inserted values are returned by default, unlike PostgreSQL and SQLite.
 
+- Does not support "if not exists" syntax when creating indexes, workaround is to create index only on a newly created table.
 
 ## PostgreSQL
 

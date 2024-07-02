@@ -13,7 +13,19 @@ import {
 } from 'kysely';
 
 export class SqliteDialect extends KyselySqliteDialect implements Dialect {
+  name = 'SQLite';
   isStreamingSupported = false;
+
+  async hasTable(db: Kysely<any>, tableName: string): Promise<boolean> {
+    const result = await db
+      .selectFrom('sqlite_master')
+      .select('name')
+      .where('type', '=', 'table')
+      .where('name', '=', tableName)
+      .execute();
+
+    return result.length > 0;
+  }
 
   addAutoIncrementingColumn<TB extends string>(
     builder: CreateTableBuilder<TB>,
