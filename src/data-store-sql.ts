@@ -30,7 +30,7 @@ export class DataStoreSql implements DataStore {
 
     let table = this.#db.schema
       .createTable(tableName)
-      .ifNotExists()
+      .ifNotExists()// kept to show supported by all dialects in contrast to ifNotExists() below, though not needed due to hasTable() check above
       .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('recordId', 'varchar(60)', (col) => col.notNull())
       .addColumn('dataCid', 'varchar(60)', (col) => col.notNull());

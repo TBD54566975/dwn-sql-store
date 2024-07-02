@@ -32,7 +32,7 @@ export class ResumableTaskStoreSql implements ResumableTaskStore {
 
     let table = this.#db.schema
       .createTable(tableName)
-      .ifNotExists()
+      .ifNotExists() // kept to show supported by all dialects in contrast to ifNotExists() below, though not needed due to hasTable() check above
       .addColumn('id', 'varchar(255)', (col) => col.primaryKey())
       .addColumn('task', 'text')
       .addColumn('timeout', 'bigint')
