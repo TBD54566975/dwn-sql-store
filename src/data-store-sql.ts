@@ -19,8 +19,17 @@ export class DataStoreSql implements DataStore {
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
 
+    // if table already exists, there is no more things todo
+    const tableName = 'dataStore';
+    const tableExists = await this.#dialect.hasTable(this.#db, tableName);
+    if (tableExists) {
+      return;
+    }
+
+    // else create the table and corresponding indexes
+
     let table = this.#db.schema
-      .createTable('dataStore')
+      .createTable(tableName)
       .ifNotExists()
       .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
       .addColumn('recordId', 'varchar(60)', (col) => col.notNull())
@@ -32,10 +41,10 @@ export class DataStoreSql implements DataStore {
     await table.execute();
 
     // Add index for efficient lookups.
-    this.#db.schema
+    await this.#db.schema
       .createIndex('tenant_recordId_dataCid')
-      .ifNotExists()
-      .on('dataStore')
+      // .ifNotExists() // intentionally kept commented out code to show that it is not supported by all dialects (ie. MySQL)
+      .on(tableName)
       .columns(['tenant', 'recordId', 'dataCid'])
       .unique()
       .execute();

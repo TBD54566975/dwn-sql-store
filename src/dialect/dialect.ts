@@ -12,7 +12,10 @@ import {
 } from 'kysely';
 
 export interface Dialect extends KyselyDialect {
+  readonly name: string;
   readonly isStreamingSupported: boolean;
+
+  hasTable(db: Kysely<any>, tableName: string): Promise<boolean>;
 
   addAutoIncrementingColumn<TB extends string>(
     builder: CreateTableBuilder<TB>,

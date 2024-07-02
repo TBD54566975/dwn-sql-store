@@ -13,7 +13,18 @@ import {
 } from 'kysely';
 
 export class PostgresDialect extends KyselyPostgresDialect implements Dialect {
+  name = 'PostgreSQL';
   isStreamingSupported = true;
+
+  async hasTable(db: Kysely<any>, tableName: string): Promise<boolean> {
+    const result = await db
+      .selectFrom('information_schema.tables')
+      .select('table_name')
+      .where('table_name', '=', tableName)
+      .execute();
+
+    return result.length > 0;
+  }
 
   addAutoIncrementingColumn<TB extends string>(
     builder: CreateTableBuilder<TB>,
