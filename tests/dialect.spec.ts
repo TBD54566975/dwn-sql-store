@@ -1,18 +1,18 @@
 import chai, { expect } from 'chai';
-import { testMysqlDialect, testPostgresDialect, testSqliteDialect } from './test-dialects.js';
-
-import { Kysely } from 'kysely';
-import { DwnDatabaseType } from '../src/types.js';
-
 import chaiAsPromised from 'chai-as-promised';
+
+import { DwnDatabaseType } from '../src/types.js';
+import { executeWithRetryIfDatabaseIsLocked } from '../src/utils/transaction.js';
+import { Kysely } from 'kysely';
 import { TestDataGenerator } from '@tbd54566975/dwn-sdk-js';
+import { testMysqlDialect, testPostgresDialect, testSqliteDialect } from './test-dialects.js';
 
 chai.use(chaiAsPromised);
 
 describe('Dialect tests', () => {
   const databaseDialects = [testMysqlDialect, testPostgresDialect, testSqliteDialect];
   for (const dialect of databaseDialects) {
-    it(`should check if table exists correctly: ${dialect.name}`, async () => {
+    it(`hasTable() should work: ${dialect.name}`, async () => {
       const database = new Kysely<DwnDatabaseType>({ dialect });
 
       const randomTableName = `test_table_${TestDataGenerator.randomString(10)}`;
@@ -32,6 +32,16 @@ describe('Dialect tests', () => {
 
       tableExists = await dialect.hasTable(database, randomTableName);
       expect(tableExists).to.be.false;
+    });
+
+    it(`executeWithRetryIfDatabaseIsLocked() should work: ${dialect.name}`, async () => {
+      const database = new Kysely<DwnDatabaseType>({ dialect });
+      const operation = async (_transaction) => {
+        throw new Error('Some error');
+      };
+
+      const executePromise = executeWithRetryIfDatabaseIsLocked(database, operation);
+      await expect(executePromise).to.be.rejectedWith('Some error');
     });
   }
 });
