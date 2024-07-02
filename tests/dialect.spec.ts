@@ -34,7 +34,7 @@ describe('Dialect tests', () => {
       expect(tableExists).to.be.false;
     });
 
-    it(`executeWithRetryIfDatabaseIsLocked() should work: ${dialect.name}`, async () => {
+    it(`executeWithRetryIfDatabaseIsLocked() should rethrow error if its not due to database being locked: ${dialect.name}: ${dialect.name}`, async () => {
       const database = new Kysely<DwnDatabaseType>({ dialect });
       const operation = async (_transaction) => {
         throw new Error('Some error');
