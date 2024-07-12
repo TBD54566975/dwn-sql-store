@@ -40,60 +40,108 @@ export class MessageStoreSql implements MessageStore {
     }
 
     this.#db = new Kysely<DwnDatabaseType>({ dialect: this.#dialect });
-    let createTable = this.#db.schema
-      .createTable('messageStoreMessages')
-      .ifNotExists()
-      .addColumn('tenant', 'varchar(255)', (col) => col.notNull())
-      .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
-      .addColumn('encodedData', 'text') // we optionally store encoded data if it is below a threshold
-      // "indexes" start
-      .addColumn('interface', 'text')
-      .addColumn('method', 'text')
-      .addColumn('schema', 'text')
-      .addColumn('dataCid', 'text')
-      .addColumn('dataSize', 'integer')
-      .addColumn('dateCreated', 'text')
-      .addColumn('delegated', 'text')
-      .addColumn('messageTimestamp', 'text')
-      .addColumn('dataFormat', 'text')
-      .addColumn('isLatestBaseState', 'text')
-      .addColumn('published', 'text')
-      .addColumn('author', 'text')
-      .addColumn('recordId', 'varchar(60)')
-      .addColumn('entryId', 'text')
-      .addColumn('datePublished', 'text')
-      .addColumn('latest', 'text')
-      .addColumn('protocol', 'text')
-      .addColumn('dateExpires', 'text')
-      .addColumn('description', 'text')
-      .addColumn('grantedTo', 'text')
-      .addColumn('grantedBy', 'text')
-      .addColumn('grantedFor', 'text')
-      .addColumn('permissionsRequestId', 'text')
-      .addColumn('attester', 'text')
-      .addColumn('protocolPath', 'text')
-      .addColumn('recipient', 'text')
-      .addColumn('contextId', 'text')
-      .addColumn('parentId', 'text')
-      .addColumn('permissionGrantId', 'text')
-      .addColumn('prune', 'text');
-      // "indexes" end
 
-    let createRecordsTagsTable = this.#db.schema
-      .createTable('messageStoreRecordsTags')
-      .ifNotExists()
-      .addColumn('tag', 'text', (col) => col.notNull())
-      .addColumn('valueString', 'text')
-      .addColumn('valueNumber', 'decimal');
+    // create messages table if it does not exist
+    const messagesTableName = 'messageStoreMessages';
+    const messagesTableExists = await this.#dialect.hasTable(this.#db, messagesTableName);
+    if (!messagesTableExists) {
+      let createMessagesTable = this.#db.schema
+        .createTable(messagesTableName)
+        .ifNotExists()
+        .addColumn('tenant', 'varchar(100)', (col) => col.notNull())
+        .addColumn('messageCid', 'varchar(60)', (col) => col.notNull())
+        .addColumn('interface', 'varchar(20)')
+        .addColumn('method', 'varchar(20)')
+        .addColumn('recordId', 'varchar(60)')
+        .addColumn('entryId','varchar(60)')
+        .addColumn('parentId', 'varchar(60)')
+        .addColumn('protocol', 'varchar(200)')
+        .addColumn('protocolPath', 'varchar(200)')
+        .addColumn('contextId', 'varchar(500)')
+        .addColumn('schema', 'varchar(200)')
+        .addColumn('author', 'varchar(100)')
+        .addColumn('recipient', 'varchar(100)')
+        .addColumn('messageTimestamp', 'varchar(30)')
+        .addColumn('dateCreated', 'varchar(30)')
+        .addColumn('datePublished', 'varchar(30)')
+        .addColumn('isLatestBaseState', 'boolean')
+        .addColumn('published', 'boolean')
+        .addColumn('prune', 'boolean')
+        .addColumn('dataFormat', 'varchar(30)')
+        .addColumn('dataCid', 'varchar(60)')
+        .addColumn('dataSize', 'integer')
+        .addColumn('encodedData', 'text') // we optionally store encoded data if it is below a threshold
+        .addColumn('attester', 'text')
+        .addColumn('permissionGrantId', 'varchar(60)')
+        .addColumn('latest', 'text'); // TODO: obsolete, remove once `dwn-sdk-js` tests are updated
 
-    // Add columns that have dialect-specific constraints
-    createTable = this.#dialect.addAutoIncrementingColumn(createTable, 'id', (col) => col.primaryKey());
-    createTable = this.#dialect.addBlobColumn(createTable, 'encodedMessageBytes', (col) => col.notNull());
-    createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
-    createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, 'messageStoreRecordsTags', 'messageInsertId', 'integer', 'messageStoreMessages', 'id', 'cascade');
+      // Add columns that have dialect-specific constraints
+      createMessagesTable = this.#dialect.addAutoIncrementingColumn(createMessagesTable, 'id', (col) => col.primaryKey());
+      createMessagesTable = this.#dialect.addBlobColumn(createMessagesTable, 'encodedMessageBytes', (col) => col.notNull());
+      await createMessagesTable.execute();
 
-    await createTable.execute();
-    await createRecordsTagsTable.execute();
+      // add indexes to the table
+      await this.createIndexes(this.#db, messagesTableName, [
+        ['tenant'], // baseline protection to prevent full table scans across all tenants
+        ['tenant', 'recordId'], // multiple uses, notably heavily depended by record chain construction for protocol authorization
+        ['tenant', 'parentId'], // used to walk down hierarchy of records, use cases include purging of records
+        ['tenant', 'protocol', 'published', 'messageTimestamp'], // index used for basically every external query.
+        ['tenant', 'interface'], // mainly for fast fetch of ProtocolsConfigure for authorization, not needed if protocol was a DWN Record
+        ['tenant', 'contextId', 'messageTimestamp'], // expected to be used for common query pattern
+        ['tenant', 'permissionGrantId'], // for deleting grant-authorized messages though pending https://github.com/TBD54566975/dwn-sdk-js/issues/716
+        // other potential indexes
+        // ['tenant', 'author'],
+        // ['tenant', 'recipient'],
+        // ['tenant', 'schema', 'dataFormat'],
+        // ['tenant', 'dateCreated'],
+        // ['tenant', 'datePublished'],
+        // ['tenant', 'messageCid'],
+        // ['tenant', 'protocolPath'],
+      ]);
+    }
+
+    // create tags table
+    const tagsTableName = 'messageStoreRecordsTags';
+    const tagsTableExists = await this.#dialect.hasTable(this.#db, tagsTableName);
+    if (!tagsTableExists) {
+      let createRecordsTagsTable = this.#db.schema
+        .createTable(tagsTableName)
+        .ifNotExists()
+        .addColumn('tag', 'varchar(30)', (col) => col.notNull())
+        .addColumn('valueString', 'varchar(200)')
+        .addColumn('valueNumber', 'decimal');
+
+      // Add columns that have dialect-specific constraints
+      const foreignMessageInsertId = 'messageInsertId';
+      createRecordsTagsTable = this.#dialect.addAutoIncrementingColumn(createRecordsTagsTable, 'id', (col) => col.primaryKey());
+      createRecordsTagsTable = this.#dialect.addReferencedColumn(createRecordsTagsTable, tagsTableName, foreignMessageInsertId, 'integer', 'messageStoreMessages', 'id', 'cascade');
+      await createRecordsTagsTable.execute();
+
+      // add indexes to the table
+      await this.createIndexes(this.#db, tagsTableName, [
+        [foreignMessageInsertId],
+        ['tag', 'valueString'],
+        ['tag', 'valueNumber']
+      ]);
+    }
+  }
+
+  /**
+   *  Creates indexes on the given table.
+   * @param tableName The name of the table to create the indexes on.
+   * @param indexes Each inner array represents a single index and contains the column names to be indexed as a composite index.
+   *                If the inner array contains only one element, it will be treated as a single column index.
+   */
+  async createIndexes<T>(database: Kysely<T>, tableName: string, indexes: string[][]): Promise<void> {
+    for (const columnNames of indexes) {
+      const indexName = 'index_' + columnNames.join('_'); // e.g. index_tenant_protocol
+      await database.schema
+        .createIndex(indexName)
+        // .ifNotExists() // intentionally kept commented out code to show that it is not supported by all dialects (ie. MySQL)
+        .on(tableName)
+        .columns(columnNames)
+        .execute();
+    }
   }
 
   async close(): Promise<void> {

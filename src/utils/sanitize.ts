@@ -40,12 +40,14 @@ export function sanitizeIndexes(records: KeyValues) {
   }
 }
 
-// we sanitize the incoming value into a string or number
-// sqlite3 and the driver we use does not support booleans, so we convert them to strings
+/**
+ * Sanitizes the given value into a string or number.
+ * NOTE: sqlite3 we use does not support inserting boolean values, so we convert them to a number.
+ */
 export function sanitizedValue(value: string | number | boolean): string | number {
   switch (typeof value) {
   case 'boolean':
-    return String(value);
+    return value ? 1 : 0;
   default:
     return value;
   }
@@ -85,12 +87,18 @@ export function sanitizeFiltersAndSeparateTags(filters: Filter[]): {
   return extractedFilters;
 }
 
-// we sanitize the filter value for a string representation of the boolean
+// we sanitize the filter value for a number representation of the boolean
+
+/**
+ * Sanitizes the given filter value to align with the value conversions done during insertions/updates.
+ * NOTE: sqlite3 we use does not support inserting boolean values,
+ *       so we convert them to a number during insertions/updates, as a result we need to align the filter values in queries.
+*/
 // TODO: export filter types from `dwn-sdk-js`
 export function sanitizeFilterValue(value: any): any {
   switch (typeof value) {
   case 'boolean':
-    return String(value);
+    return value ? 1 : 0;
   default:
     return value;
   }

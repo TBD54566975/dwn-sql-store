@@ -16,19 +16,14 @@ type EventLogTable = {
   dateCreated: string | null;
   messageTimestamp: string | null;
   dataFormat: string | null;
-  isLatestBaseState: string | null;
-  published: string | null;
+  isLatestBaseState: boolean | null;
+  published: boolean | null;
   author: string | null;
   recordId: string | null;
   entryId: string | null;
   datePublished: string | null;
   latest: string | null;
   protocol: string | null;
-  dateExpires: string | null;
-  description: string | null;
-  grantedTo: string | null;
-  grantedBy: string | null;
-  grantedFor: string | null;
   permissionsRequestId: string | null;
   attester: string | null;
   protocolPath: string | null;
@@ -36,7 +31,7 @@ type EventLogTable = {
   contextId: string | null;
   parentId: string | null;
   permissionGrantId: string | null;
-  prune: string | null;
+  prune: boolean | null;
   // "indexes" end
 }
 
@@ -55,19 +50,13 @@ type MessageStoreTable = {
   dateCreated: string | null;
   messageTimestamp: string | null;
   dataFormat: string | null;
-  isLatestBaseState: string | null;
-  published: string | null;
+  isLatestBaseState: boolean | null;
+  published: boolean | null;
   author: string | null;
   recordId: string | null;
   entryId: string | null;
   datePublished: string | null;
-  latest: string | null;
   protocol: string | null;
-  dateExpires: string | null;
-  description: string | null;
-  grantedTo: string | null;
-  grantedBy: string | null;
-  grantedFor: string | null;
   permissionsRequestId: string | null;
   attester: string | null;
   protocolPath: string | null;
@@ -75,7 +64,7 @@ type MessageStoreTable = {
   contextId: string | null;
   parentId: string | null;
   permissionGrantId: string | null;
-  prune: string | null;
+  prune: boolean | null;
   // "indexes" end
 }
 

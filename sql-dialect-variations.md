@@ -10,6 +10,8 @@ We use `Kysely` to help us abstract differences between SQL variants in this cod
 
 - Does not support "if not exists" syntax when creating indexes, workaround is to create index only on a newly created table.
 
+- Requires length specified in a column for it to be indexable. The work around is easy however: use 'varchar(<length>)' when declaring the column.
+
 ## PostgreSQL
 
 - Uses a special type: `serial` for auto-increment columns.
@@ -18,3 +20,6 @@ We use `Kysely` to help us abstract differences between SQL variants in this cod
 
 - `bigint` column type gets returned as `string` in `pg` library.
 
+## SQLite
+
+- `sqlite3` we use in `Kysely` does not support insertion of boolean values, as a result we need to convert boolean values into integers in DB queries.
